@@ -123,6 +123,10 @@ export default function EditProduct() {
     compare_price: "",
     stock: "0",
     low_stock_threshold: "5",
+    shipping_weight_kg: "",
+    shipping_length_cm: "",
+    shipping_width_cm: "",
+    shipping_height_cm: "",
     status: "ACTIVE",
     is_featured: false,
   });
@@ -170,6 +174,10 @@ export default function EditProduct() {
         compare_price: product.compare_price ?? "",
         stock: product.stock ?? "0",
         low_stock_threshold: product.low_stock_threshold ?? "5",
+        shipping_weight_kg: product.shipping_weight_kg ?? "",
+        shipping_length_cm: product.shipping_length_cm ?? "",
+        shipping_width_cm: product.shipping_width_cm ?? "",
+        shipping_height_cm: product.shipping_height_cm ?? "",
         status: product.status || "ACTIVE",
         is_featured: Boolean(product.is_featured),
       });
@@ -312,6 +320,20 @@ export default function EditProduct() {
           form.compare_price === "" ? null : Number(form.compare_price),
         stock: hasVariants ? variantStock : Number(form.stock || 0),
         low_stock_threshold: Number(form.low_stock_threshold || 5),
+        shipping_weight_kg:
+          form.shipping_weight_kg === ""
+            ? null
+            : Number(form.shipping_weight_kg),
+        shipping_length_cm:
+          form.shipping_length_cm === ""
+            ? null
+            : Number(form.shipping_length_cm),
+        shipping_width_cm:
+          form.shipping_width_cm === "" ? null : Number(form.shipping_width_cm),
+        shipping_height_cm:
+          form.shipping_height_cm === ""
+            ? null
+            : Number(form.shipping_height_cm),
         status: form.status,
         is_featured: Boolean(form.is_featured),
       };
@@ -362,6 +384,14 @@ export default function EditProduct() {
           stock: savedProduct.stock ?? current.stock,
           low_stock_threshold:
             savedProduct.low_stock_threshold ?? current.low_stock_threshold,
+          shipping_weight_kg:
+            savedProduct.shipping_weight_kg ?? current.shipping_weight_kg,
+          shipping_length_cm:
+            savedProduct.shipping_length_cm ?? current.shipping_length_cm,
+          shipping_width_cm:
+            savedProduct.shipping_width_cm ?? current.shipping_width_cm,
+          shipping_height_cm:
+            savedProduct.shipping_height_cm ?? current.shipping_height_cm,
           category_id: savedProduct.category_id ?? current.category_id,
           brand_id: savedProduct.brand_id ?? current.brand_id,
           status: savedProduct.status ?? current.status,
@@ -910,6 +940,52 @@ export default function EditProduct() {
               </button>
             </div>
           )}
+        </section>
+
+        <section className="panel form-card editor-card">
+          <div className="editor-section-head">
+            <div>
+              <h3 className="panel-title">Shipping package</h3>
+              <p className="panel-subtitle">
+                Use the real packed dimensions and weight for courier
+                fulfillment.
+              </p>
+            </div>
+          </div>
+          <div className="form-grid-4">
+            <Field
+              label="Weight (kg)"
+              type="number"
+              value={form.shipping_weight_kg}
+              onChange={(value) => update("shipping_weight_kg", value)}
+              placeholder="e.g. 0.50"
+            />
+            <Field
+              label="Length (cm)"
+              type="number"
+              value={form.shipping_length_cm}
+              onChange={(value) => update("shipping_length_cm", value)}
+              placeholder="e.g. 20"
+            />
+            <Field
+              label="Width (cm)"
+              type="number"
+              value={form.shipping_width_cm}
+              onChange={(value) => update("shipping_width_cm", value)}
+              placeholder="e.g. 15"
+            />
+            <Field
+              label="Height (cm)"
+              type="number"
+              value={form.shipping_height_cm}
+              onChange={(value) => update("shipping_height_cm", value)}
+              placeholder="e.g. 8"
+            />
+          </div>
+          <p className="panel-subtitle">
+            All four values are required before a real courier shipment can be
+            created. Variants use this product package profile.
+          </p>
         </section>
 
         <section className="panel form-card editor-card">

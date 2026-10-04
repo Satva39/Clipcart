@@ -24,6 +24,7 @@ from app.modules.seller_verification.routes import seller_verification_bp
 from app.modules.store.routes import store_bp
 from app.modules.supplier_dashboard.routes import supplier_dashboard_bp
 from app.modules.supplier_orders.routes import supplier_orders_bp
+from app.modules.shiprocket.routes import shiprocket_bp
 from app.modules.supplier_portal import supplier_portal_bp
 from app.modules.supplier_registration.routes import supplier_registration_bp
 from app.modules.trending import trending_bp
@@ -100,6 +101,7 @@ def register_routes(app):
         payouts_bp,
         supplier_orders_bp,
         supplier_portal_bp,
+        shiprocket_bp,
         admin_bp,
     )
 

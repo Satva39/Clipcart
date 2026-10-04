@@ -19,6 +19,7 @@ from app.modules.products.models import Product
 from app.modules.uploads.services import UploadService
 from app.modules.returns.models import ReturnRequest
 from app.modules.supplier_orders.enums import DeliveryStatus, PickupStatus
+from app.modules.shiprocket.service import ShiprocketService
 
 from .models import DeliveryAssignment
 from .repository import DeliveryAssignmentRepository
@@ -110,6 +111,7 @@ class DeliveryAssignmentService:
                 "status": assignment.pickup_status.value,
                 "time": assignment.pickup_time,
             },
+            "shipments": ShiprocketService.get_logistics_shipments(order),
             "delivery": {
                 "status": assignment.delivery_status.value,
                 "time": assignment.delivery_time,
@@ -409,6 +411,20 @@ class DeliveryAssignmentService:
                 return None
             if order.status != OrderStatus.PROCESSING:
                 raise ValueError("Pickup can only be assigned after supplier handoff.")
+            if any(
+                (shipment.status or "").upper()
+                in {
+                    "PICKED UP",
+                    "SHIPPED",
+                    "IN TRANSIT",
+                    "OUT FOR DELIVERY",
+                    "DELIVERED",
+                }
+                for shipment in ShiprocketService.get_logistics_shipments(order)
+            ):
+                raise ValueError(
+                    "Shiprocket already controls the shipment after courier handoff."
+                )
             if assignment.pickup_status == PickupStatus.PICKED_UP:
                 raise ValueError("The order has already been picked up.")
 
@@ -452,6 +468,10 @@ class DeliveryAssignmentService:
                 return None
             if assignment.pickup_status != PickupStatus.ASSIGNED:
                 raise ValueError("Assign a delivery agent before marking the pickup.")
+            if ShiprocketService.get_logistics_shipments(order):
+                raise ValueError(
+                    "Courier pickup is synchronized from Shiprocket; do not mark a Shiprocket shipment manually."
+                )
             if order.status != OrderStatus.PROCESSING:
                 raise ValueError("Order is not awaiting supplier handoff/pickup.")
 
@@ -512,6 +532,21 @@ class DeliveryAssignmentService:
             if assignment.delivery_status != DeliveryStatus.IN_TRANSIT:
                 raise ValueError(
                     "Order must be in transit before marking out for delivery."
+                )
+            if any(
+                (shipment.get("status") or "").upper()
+                not in {
+                    "FAILED",
+                    "PENDING",
+                    "ORDER_CREATED",
+                    "AWB ASSIGNED",
+                    "PICKUP SCHEDULED",
+                    "MANIFEST GENERATED",
+                }
+                for shipment in ShiprocketService.get_logistics_shipments(order)
+            ):
+                raise ValueError(
+                    "Out-for-delivery state is synchronized from Shiprocket."
                 )
             if not assignment.agent_name:
                 raise ValueError(
@@ -870,6 +905,11 @@ class DeliveryAssignmentService:
                             DeliveryAssignmentService._item_preview(item)
                             for item in order.items
                         ]
+                        if order
+                        else []
+                    ),
+                    "shipments": (
+                        ShiprocketService.get_logistics_shipments(order)
                         if order
                         else []
                     ),

@@ -35,6 +35,7 @@ from app.modules.payments.models import Payment
 from app.modules.payouts.models import SupplierPayout, SupplierPayoutAccount
 from app.modules.products.models import Product
 from app.services.cloudinary_service import CloudinaryService
+from app.modules.shiprocket.service import ShiprocketService
 from app.modules.seller_verification.models import SellerVerification
 from app.utils.response import error_response, success_response
 
@@ -390,6 +391,100 @@ def reset_password():
         return error_response(str(exc), 400)
 
     return success_response("Admin password reset successfully.")
+
+
+@admin_bp.get("/orders")
+@admin_authorized
+def admin_orders():
+    query = Order.query.order_by(Order.created_at.desc())
+    search = str(request.args.get("search") or "").strip()
+    status = str(request.args.get("status") or "").strip().upper()
+    if search:
+        like = f"%{search}%"
+        query = query.join(Account, Order.account_id == Account.id).filter(
+            or_(
+                Account.full_name.ilike(like),
+                Account.email.ilike(like),
+                Order.customer_name.ilike(like),
+                Order.customer_email.ilike(like),
+            )
+        )
+    if status:
+        try:
+            query = query.filter(Order.status == OrderStatus(status))
+        except ValueError:
+            return error_response("Invalid order status.", 400)
+
+    rows = query.limit(100).all()
+    return success_response(
+        data=[
+            {
+                "id": order.id,
+                "customer": order.customer_name,
+                "customer_email": order.customer_email,
+                "items": len(order.items or []),
+                "total": float(order.total or 0),
+                "status": order.status.value if order.status else None,
+                "created_at": order.created_at,
+            }
+            for order in rows
+        ]
+    )
+
+
+@admin_bp.get("/orders/<int:order_id>")
+@admin_authorized
+def admin_order_detail(order_id):
+    order = Order.query.filter_by(id=order_id).first()
+    if not order:
+        return error_response("Order not found.", 404)
+    payment = order.payment
+    return success_response(
+        data={
+            "id": order.id,
+            "status": order.status.value if order.status else None,
+            "subtotal": float(order.subtotal or 0),
+            "discount": float(order.discount or 0),
+            "total": float(order.total or 0),
+            "customer": {
+                "name": order.customer_name,
+                "email": order.customer_email,
+                "phone": order.delivery_phone,
+            },
+            "address": {
+                "full_name": order.delivery_full_name,
+                "address_line_1": order.delivery_address_line_1,
+                "address_line_2": order.delivery_address_line_2,
+                "city": order.delivery_city,
+                "state": order.delivery_state,
+                "postal_code": order.delivery_postal_code,
+                "country": order.delivery_country,
+            },
+            "payment": (
+                {
+                    "status": payment.status,
+                    "gateway": payment.gateway,
+                    "payment_type": payment.payment_type,
+                    "transaction_id": payment.transaction_id,
+                }
+                if payment
+                else None
+            ),
+            "items": [
+                {
+                    "id": item.id,
+                    "product_name": item.product_name_snapshot,
+                    "variant_name": item.variant_value_snapshot
+                    or item.variant_name_snapshot,
+                    "quantity": item.quantity,
+                    "unit_price": float(item.unit_price or 0),
+                    "subtotal": float(item.subtotal or 0),
+                }
+                for item in order.items
+            ],
+            "shipments": ShiprocketService.get_logistics_shipments(order),
+        }
+    )
 
 
 @admin_bp.get("/profile")

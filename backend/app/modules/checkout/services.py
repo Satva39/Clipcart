@@ -23,6 +23,7 @@ from app.modules.payments.models import Payment
 from app.modules.products.models import Product
 from app.modules.product_variants.models import ProductVariant
 from app.modules.supplier_orders.models import DeliveryAssignment
+from app.modules.shiprocket.service import ShiprocketService
 from app.modules.stock_alerts.services import StockAlertService
 from app.services.invoice_service import InvoiceService
 from app.services.razorpay_service import RazorpayService
@@ -35,6 +36,15 @@ from .repository import CheckoutRepository
 
 
 class CheckoutService:
+    @staticmethod
+    def _provision_shiprocket(order):
+        try:
+            return ShiprocketService.ensure_order_shipments(order.id)
+        except Exception:
+            # Shiprocket is downstream of the already-verified Clipcart order.
+            # Never turn a courier outage into a payment/refund failure.
+            return []
+
     @staticmethod
     def create_or_get(account_id):
         session = CheckoutRepository.get_active_by_account(account_id)
@@ -702,6 +712,7 @@ class CheckoutService:
             session.razorpay_payment_id = razorpay_payment_id
             session.payment_status = "PAID"
             order = CheckoutService._finalize_paid_session(session)
+            CheckoutService._provision_shiprocket(order)
             return {"order_id": order.id, "payment_status": "COMPLETED"}
 
         try:
@@ -755,6 +766,7 @@ class CheckoutService:
         session.payment_error = None
         try:
             order = CheckoutService._finalize_paid_session(session)
+            CheckoutService._provision_shiprocket(order)
             return {"order_id": order.id, "payment_status": "COMPLETED"}
         except Exception as exc:
             captured_amount = Decimal(actual_paise) / Decimal("100")
@@ -886,4 +898,5 @@ class CheckoutService:
         if session.payment_status != "PAID":
             raise ValueError("Payment not completed.")
         order = CheckoutService._finalize_paid_session(session)
+        CheckoutService._provision_shiprocket(order)
         return order

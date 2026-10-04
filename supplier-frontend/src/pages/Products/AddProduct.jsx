@@ -245,6 +245,10 @@ export default function AddProduct() {
     compare_price: "",
     stock: "0",
     low_stock_threshold: "5",
+    shipping_weight_kg: "",
+    shipping_length_cm: "",
+    shipping_width_cm: "",
+    shipping_height_cm: "",
     sku: "",
     status: "ACTIVE",
     is_featured: false,
@@ -498,6 +502,20 @@ export default function AddProduct() {
           form.compare_price === "" ? null : Number(form.compare_price),
         stock: variants.length ? totalVariantStock : Number(form.stock || 0),
         low_stock_threshold: Number(form.low_stock_threshold || 5),
+        shipping_weight_kg:
+          form.shipping_weight_kg === ""
+            ? null
+            : Number(form.shipping_weight_kg),
+        shipping_length_cm:
+          form.shipping_length_cm === ""
+            ? null
+            : Number(form.shipping_length_cm),
+        shipping_width_cm:
+          form.shipping_width_cm === "" ? null : Number(form.shipping_width_cm),
+        shipping_height_cm:
+          form.shipping_height_cm === ""
+            ? null
+            : Number(form.shipping_height_cm),
         sku: form.sku.trim() || `CLP-${Date.now()}`,
         status: form.status,
         is_featured: Boolean(form.is_featured),
@@ -761,7 +779,53 @@ export default function AddProduct() {
         <section className="panel form-card editor-card">
           <div className="editor-section-head">
             <div>
-              <h3 className="panel-title">3. Product images</h3>
+              <h3 className="panel-title">3. Shipping package</h3>
+              <p className="panel-subtitle">
+                Enter the real packed weight and dimensions used for courier
+                pickup.
+              </p>
+            </div>
+          </div>
+          <div className="form-grid-4">
+            <Field
+              label="Weight (kg)"
+              type="number"
+              value={form.shipping_weight_kg}
+              set={(value) => update("shipping_weight_kg", value)}
+              placeholder="e.g. 0.50"
+            />
+            <Field
+              label="Length (cm)"
+              type="number"
+              value={form.shipping_length_cm}
+              set={(value) => update("shipping_length_cm", value)}
+              placeholder="e.g. 20"
+            />
+            <Field
+              label="Width (cm)"
+              type="number"
+              value={form.shipping_width_cm}
+              set={(value) => update("shipping_width_cm", value)}
+              placeholder="e.g. 15"
+            />
+            <Field
+              label="Height (cm)"
+              type="number"
+              value={form.shipping_height_cm}
+              set={(value) => update("shipping_height_cm", value)}
+              placeholder="e.g. 8"
+            />
+          </div>
+          <p className="panel-subtitle">
+            All four values are required before a real courier shipment can be
+            created. Variants use this product package profile.
+          </p>
+        </section>
+
+        <section className="panel form-card editor-card">
+          <div className="editor-section-head">
+            <div>
+              <h3 className="panel-title">4. Product images</h3>
               <p className="panel-subtitle">
                 Select one or more JPG, PNG or WebP files.
               </p>

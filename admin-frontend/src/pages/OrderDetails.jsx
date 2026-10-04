@@ -8,7 +8,7 @@ import {
   FaUser,
 } from "react-icons/fa";
 
-import { getAdminOrder } from "../services/orderService";
+import { getAdminOrder, retryAdminShipment } from "../services/orderService";
 
 export default function OrderDetails() {
   const { orderId } = useParams();
@@ -18,6 +18,7 @@ export default function OrderDetails() {
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState("");
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     async function loadOrder() {
@@ -57,6 +58,22 @@ export default function OrderDetails() {
         <div className="admin-error">{error || "Order not found."}</div>
       </div>
     );
+  }
+
+  async function retryShipments() {
+    try {
+      setRetrying(true);
+      setError("");
+      await retryAdminShipment(orderId);
+      const data = await getAdminOrder(orderId);
+      setOrder(data);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message || "Unable to retry courier shipment.",
+      );
+    } finally {
+      setRetrying(false);
+    }
   }
 
   return (
@@ -176,6 +193,62 @@ export default function OrderDetails() {
           </div>
         </section>
       </div>
+
+      <section className="admin-detail-card admin-items-card">
+        <div className="admin-detail-title">
+          <FaBoxOpen />
+          <h2>Courier Shipments</h2>
+          <button
+            type="button"
+            className="admin-primary-btn"
+            onClick={retryShipments}
+            disabled={retrying}
+            style={{ marginLeft: "auto" }}
+          >
+            {retrying ? "Retrying…" : "Retry failed shipments"}
+          </button>
+        </div>
+        {order.shipments?.length ? (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Supplier</th>
+                  <th>Status</th>
+                  <th>Courier</th>
+                  <th>AWB</th>
+                  <th>Last sync</th>
+                </tr>
+              </thead>
+              <tbody>
+                {order.shipments.map((shipment) => (
+                  <tr key={shipment.id}>
+                    <td>
+                      {shipment.supplier?.business_name ||
+                        shipment.supplier?.name ||
+                        "—"}
+                    </td>
+                    <td>{shipment.status || "—"}</td>
+                    <td>{shipment.courier_name || "Awaiting assignment"}</td>
+                    <td>{shipment.awb_code || "Awaiting assignment"}</td>
+                    <td>
+                      {shipment.last_synced_at
+                        ? new Date(shipment.last_synced_at).toLocaleString(
+                            "en-IN",
+                          )
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="admin-empty">
+            No Shiprocket shipment record exists yet.
+          </div>
+        )}
+      </section>
 
       <section className="admin-detail-card admin-items-card">
         <div className="admin-detail-title">

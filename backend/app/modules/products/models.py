@@ -55,6 +55,14 @@ class Product(BaseModel):
         default=0,
     )
 
+    # Physical package profile required for real courier fulfillment. These
+    # values describe one sellable package unit and are intentionally nullable
+    # so existing products remain valid until a supplier is ready to ship them.
+    shipping_weight_kg = db.Column(db.Numeric(10, 3), nullable=True)
+    shipping_length_cm = db.Column(db.Numeric(10, 2), nullable=True)
+    shipping_width_cm = db.Column(db.Numeric(10, 2), nullable=True)
+    shipping_height_cm = db.Column(db.Numeric(10, 2), nullable=True)
+
     low_stock_threshold = db.Column(db.Integer, default=5, nullable=False)
 
     sku = db.Column(

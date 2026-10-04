@@ -464,6 +464,68 @@ export default function OrderDetail() {
           <section className="order-card">
             <div className="order-card-head">
               <div>
+                <h2>Shiprocket shipments</h2>
+                <p>External courier state synchronized from Shiprocket.</p>
+              </div>
+              <FaTruck />
+            </div>
+            {Array.isArray(order.shipments) && order.shipments.length ? (
+              <div className="item-list">
+                {order.shipments.map((shipment) => (
+                  <div className="item-row" key={shipment.id}>
+                    <div>
+                      <strong>
+                        {shipment.supplier?.business_name ||
+                          shipment.supplier?.name ||
+                          "Supplier"}
+                      </strong>
+                      <span>
+                        {String(shipment.status || "PENDING").replaceAll(
+                          "_",
+                          " ",
+                        )}
+                        {shipment.courier_name
+                          ? ` · ${shipment.courier_name}`
+                          : ""}
+                      </span>
+                      <span>
+                        AWB {shipment.awb_code || "Awaiting assignment"}
+                      </span>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <strong>{formatDate(shipment.last_synced_at)}</strong>
+                      <span>
+                        Pickup {formatDate(shipment.pickup_scheduled_at)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="pending-action-note">
+                <span>Shiprocket</span>
+                <strong>Shipment provisioning is pending.</strong>
+              </div>
+            )}
+            {order.shipments?.some((shipment) => shipment.failure) ? (
+              <div className="failure-box">
+                {order.shipments
+                  .filter((shipment) => shipment.failure)
+                  .map((shipment) => (
+                    <div key={`failure-${shipment.id}`}>
+                      <span>Shipment failure</span>
+                      <strong>
+                        {shipment.failure.message || shipment.failure.code}
+                      </strong>
+                    </div>
+                  ))}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="order-card">
+            <div className="order-card-head">
+              <div>
                 <h2>Delivery timeline</h2>
                 <p>Operational and customer-visible order events.</p>
               </div>

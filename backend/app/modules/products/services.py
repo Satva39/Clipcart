@@ -67,6 +67,28 @@ class ProductService:
                 else None
             ),
             "stock": int(product.stock or 0),
+            "shipping": {
+                "weight_kg": (
+                    float(product.shipping_weight_kg)
+                    if product.shipping_weight_kg is not None
+                    else None
+                ),
+                "length_cm": (
+                    float(product.shipping_length_cm)
+                    if product.shipping_length_cm is not None
+                    else None
+                ),
+                "width_cm": (
+                    float(product.shipping_width_cm)
+                    if product.shipping_width_cm is not None
+                    else None
+                ),
+                "height_cm": (
+                    float(product.shipping_height_cm)
+                    if product.shipping_height_cm is not None
+                    else None
+                ),
+            },
             "category": product.category.name if product.category else None,
             "featured": bool(product.is_featured),
             "brand": product.brand.name if product.brand else None,
@@ -90,6 +112,26 @@ class ProductService:
                 else None
             ),
             "stock": int(product.stock or 0),
+            "shipping_weight_kg": (
+                float(product.shipping_weight_kg)
+                if product.shipping_weight_kg is not None
+                else None
+            ),
+            "shipping_length_cm": (
+                float(product.shipping_length_cm)
+                if product.shipping_length_cm is not None
+                else None
+            ),
+            "shipping_width_cm": (
+                float(product.shipping_width_cm)
+                if product.shipping_width_cm is not None
+                else None
+            ),
+            "shipping_height_cm": (
+                float(product.shipping_height_cm)
+                if product.shipping_height_cm is not None
+                else None
+            ),
             "low_stock_threshold": int(product.low_stock_threshold or 5),
             "sku": product.sku,
             "status": product.status,
@@ -184,6 +226,25 @@ class ProductService:
         status = str(data.get("status", "ACTIVE")).upper()
         if status not in {"ACTIVE", "INACTIVE"}:
             raise ValueError("Invalid product status.")
+        shipping_values = {}
+        for field in (
+            "shipping_weight_kg",
+            "shipping_length_cm",
+            "shipping_width_cm",
+            "shipping_height_cm",
+        ):
+            raw = data.get(field)
+            if raw in (None, ""):
+                shipping_values[field] = None
+                continue
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                raise ValueError(f"{field} must be a valid number.")
+            minimum = 0.0001 if field == "shipping_weight_kg" else 0.5
+            if value < minimum:
+                raise ValueError(f"{field} must be greater than {minimum}.")
+            shipping_values[field] = value
         product = Product(
             seller_id=seller_id,
             category_id=data["category_id"],
@@ -196,6 +257,10 @@ class ProductService:
             price=price,
             compare_price=compare_price,
             stock=stock,
+            shipping_weight_kg=shipping_values["shipping_weight_kg"],
+            shipping_length_cm=shipping_values["shipping_length_cm"],
+            shipping_width_cm=shipping_values["shipping_width_cm"],
+            shipping_height_cm=shipping_values["shipping_height_cm"],
             low_stock_threshold=threshold,
             sku=sku,
             status=status,
@@ -231,6 +296,10 @@ def update_product(product, data):
         "compare_price",
         "stock",
         "low_stock_threshold",
+        "shipping_weight_kg",
+        "shipping_length_cm",
+        "shipping_width_cm",
+        "shipping_height_cm",
         "sku",
         "status",
         "is_featured",
@@ -249,6 +318,27 @@ def update_product(product, data):
         and not BrandRepository.get_by_id(data["brand_id"])
     ):
         raise ValueError("Brand does not exist.")
+    for field in (
+        "shipping_weight_kg",
+        "shipping_length_cm",
+        "shipping_width_cm",
+        "shipping_height_cm",
+    ):
+        if field not in data:
+            continue
+        raw = data.get(field)
+        if raw in (None, ""):
+            data[field] = None
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"{field} must be a valid number.")
+        minimum = 0.0001 if field == "shipping_weight_kg" else 0.5
+        if value < minimum:
+            raise ValueError(f"{field} must be greater than {minimum}.")
+        data[field] = value
+
     if "sku" in data:
         sku = str(data["sku"]).strip()
         if not sku:

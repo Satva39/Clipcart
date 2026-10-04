@@ -28,6 +28,13 @@ function statusLabel(value) {
   return String(value || "").replaceAll("_", " ");
 }
 
+function shipmentStatusLabel(value) {
+  return String(value || "Awaiting shipment")
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function returnStatusLabel(value) {
   return (
     {
@@ -137,6 +144,7 @@ export default function OrderDetails() {
     );
 
   const order = query.data;
+  const shipments = Array.isArray(order.shipments) ? order.shipments : [];
   const canCancel = ["PAID", "PROCESSING"].includes(order.status);
   const canReturn = order.status === "DELIVERED";
 
@@ -484,7 +492,58 @@ export default function OrderDetails() {
         <section className="cc-detail-panel cc-order-tracking-panel">
           <div className="cc-card-head">
             <div>
-              <h2>Tracking</h2>
+              <h2>Courier shipments</h2>
+              <p>Live Shiprocket shipment state synchronized by Clipcart.</p>
+            </div>
+          </div>
+          {shipments.length ? (
+            <div className="space-y-3">
+              {shipments.map((shipment) => (
+                <article
+                  key={shipment.id}
+                  className="cc-return-request-card"
+                  style={{ display: "grid", gap: "0.55rem" }}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong>Courier shipment #{shipment.id}</strong>
+                    <span className="cc-order-status">
+                      {shipmentStatusLabel(shipment.status)}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-300">
+                    <span>
+                      Courier: {shipment.courier_name || "Awaiting assignment"}
+                    </span>
+                    <span>
+                      AWB: {shipment.awb_code || "Awaiting assignment"}
+                    </span>
+                    <span>
+                      Pickup: {formatDateTime(shipment.pickup_scheduled_at)}
+                    </span>
+                    <span>
+                      Last update: {formatDateTime(shipment.last_synced_at)}
+                    </span>
+                  </div>
+                  {shipment.delivered_at ? (
+                    <small className="text-gray-500">
+                      Courier marked delivered{" "}
+                      {formatDateTime(shipment.delivered_at)}.
+                    </small>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">
+              Shipment provisioning is pending.
+            </p>
+          )}
+        </section>
+
+        <section className="cc-detail-panel cc-order-tracking-panel">
+          <div className="cc-card-head">
+            <div>
+              <h2>Tracking timeline</h2>
               <p>
                 Timeline is created from recorded backend order and delivery
                 state.

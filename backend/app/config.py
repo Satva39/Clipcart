@@ -83,6 +83,22 @@ class Config:
     RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
     RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
 
+    SHIPROCKET_EMAIL = os.getenv("SHIPROCKET_EMAIL", "").strip()
+    SHIPROCKET_PASSWORD = os.getenv("SHIPROCKET_PASSWORD", "").strip()
+    SHIPROCKET_BASE_URL = (
+        os.getenv(
+            "SHIPROCKET_BASE_URL",
+            "https://apiv2.shiprocket.in/v1/external",
+        )
+        .strip()
+        .rstrip("/")
+    )
+    SHIPROCKET_WEBHOOK_SECRET = os.getenv("SHIPROCKET_WEBHOOK_SECRET", "").strip()
+    SHIPROCKET_TIMEOUT = int(os.getenv("SHIPROCKET_TIMEOUT", "20"))
+    SHIPROCKET_SHIPPING_METHOD = (
+        os.getenv("SHIPROCKET_SHIPPING_METHOD", "SR").strip() or "SR"
+    )
+
     CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip()
     CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "").strip()
     CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "").strip()

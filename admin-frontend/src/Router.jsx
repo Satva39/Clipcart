@@ -19,6 +19,8 @@ const Payouts = lazy(() => import("./pages/Payouts"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Profile = lazy(() => import("./pages/Profile"));
+const Orders = lazy(() => import("./pages/Orders"));
+const OrderDetails = lazy(() => import("./pages/OrderDetails"));
 
 const router = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -38,6 +40,8 @@ const router = createBrowserRouter([
           { path: "/banners", element: <Banners /> },
           { path: "/settings", element: <Settings /> },
           { path: "/payouts", element: <Payouts /> },
+          { path: "/orders", element: <Orders /> },
+          { path: "/orders/:orderId", element: <OrderDetails /> },
           { path: "/analytics", element: <Analytics /> },
           { path: "/notifications", element: <Notifications /> },
           { path: "/audit-logs", element: <AuditLogs /> },

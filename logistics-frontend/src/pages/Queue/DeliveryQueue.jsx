@@ -300,6 +300,7 @@ export default function DeliveryQueue() {
                   <th>Pickup from customer</th>
                   <th>Supplier destination</th>
                   <th>Stage</th>
+                  <th>Courier shipment</th>
                   <th>Agent</th>
                   <th>Last update</th>
                   <th />
@@ -445,6 +446,27 @@ export default function DeliveryQueue() {
                       <span className="queue-pending">
                         {item.pending_action || "No pending action"}
                       </span>
+                    </td>
+                    <td>
+                      {item.shipments?.length ? (
+                        item.shipments.map((shipment) => (
+                          <span className="queue-muted" key={shipment.id}>
+                            {shipment.courier_name || "Courier pending"}
+                            {shipment.awb_code
+                              ? ` · AWB ${shipment.awb_code}`
+                              : ""}
+                            <br />
+                            {String(shipment.status || "PENDING").replaceAll(
+                              "_",
+                              " ",
+                            )}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="queue-muted">
+                          Provisioning pending
+                        </span>
+                      )}
                     </td>
                     <td>
                       <strong>{item.agent?.name || "Unassigned"}</strong>

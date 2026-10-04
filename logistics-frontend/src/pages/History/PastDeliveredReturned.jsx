@@ -98,6 +98,18 @@ function DeliveredCard({ record }) {
               <p>{record.proof_reference}</p>
             </div>
           ) : null}
+          {record.shipments?.length ? (
+            <div className="history-note">
+              <span>Courier shipment</span>
+              {record.shipments.map((shipment) => (
+                <p key={shipment.id}>
+                  {shipment.courier_name || "Courier"} · AWB{" "}
+                  {shipment.awb_code || "—"} ·{" "}
+                  {String(shipment.status || "").replaceAll("_", " ")}
+                </p>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="history-proof">

@@ -196,6 +196,7 @@ class OrderService:
                 if getattr(order, "delivery_assignment", None)
                 else None
             ),
+            "shipments": ShiprocketService.get_customer_shipments(order),
             "items": [
                 {
                     "id": item.id,
@@ -392,6 +393,11 @@ class OrderService:
         )
         db.session.commit()
 
+        try:
+            ShiprocketService.cancel_order_shipments(order.id)
+        except Exception:
+            pass
+
         if refund_required:
             try:
                 RazorpayService.refund_payment(
@@ -524,6 +530,7 @@ class OrderService:
                 if getattr(order, "delivery_assignment", None)
                 else None
             ),
+            "shipments": ShiprocketService.get_supplier_shipments(order, supplier_id),
             "items": [
                 {
                     "id": item.id,

@@ -63,6 +63,7 @@ export default function OrderDetails() {
     );
   const canProcess = order.status === "PAID";
   const delivery = order.delivery || {};
+  const shipments = Array.isArray(order.shipments) ? order.shipments : [];
   return (
     <div className="page-shell">
       <div className="page-heading">
@@ -152,6 +153,47 @@ export default function OrderDetails() {
           </div>
         </section>
       </div>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <h3 className="panel-title">Courier shipment</h3>
+            <p className="panel-subtitle">
+              Shiprocket state for this supplier's shipment.
+            </p>
+          </div>
+        </div>
+        <div className="detail-body">
+          {shipments.length ? (
+            shipments.map((shipment) => (
+              <div
+                key={shipment.id}
+                className="detail-line"
+                style={{ alignItems: "flex-start", gap: "1rem" }}
+              >
+                <span>
+                  <b>{shipment.courier_name || "Courier pending"}</b>
+                  <br />
+                  Status:{" "}
+                  {String(shipment.status || "AWAITING SHIPMENT").replaceAll(
+                    "_",
+                    " ",
+                  )}
+                  <br />
+                  AWB: {shipment.awb_code || "Awaiting assignment"}
+                </span>
+                <span style={{ textAlign: "right" }}>
+                  Pickup: {formatDateTime(shipment.pickup_scheduled_at)}
+                  <br />
+                  Updated: {formatDateTime(shipment.last_synced_at)}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="panel-subtitle">Shipment provisioning is pending.</p>
+          )}
+        </div>
+      </section>
+
       <section className="panel">
         <div className="panel-header">
           <div>

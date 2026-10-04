@@ -12,6 +12,18 @@ class ProductCreateSchema(Schema):
     compare_price = fields.Decimal(load_default=None, allow_none=True, as_string=False)
     stock = fields.Int(required=True)
     low_stock_threshold = fields.Int(load_default=5)
+    shipping_weight_kg = fields.Decimal(
+        load_default=None, allow_none=True, as_string=False
+    )
+    shipping_length_cm = fields.Decimal(
+        load_default=None, allow_none=True, as_string=False
+    )
+    shipping_width_cm = fields.Decimal(
+        load_default=None, allow_none=True, as_string=False
+    )
+    shipping_height_cm = fields.Decimal(
+        load_default=None, allow_none=True, as_string=False
+    )
     sku = fields.Str(required=True)
     status = fields.Str(load_default="ACTIVE")
     is_featured = fields.Bool(load_default=False)
