@@ -528,7 +528,7 @@ export default function AddProduct() {
       if (images.length) {
         await uploadProductImages(
           productId,
-          images.map((file) => ({ file })),
+          images.map(({ file }) => file),
         );
       }
 
@@ -727,7 +727,7 @@ export default function AddProduct() {
               </select>
             </label>
           </div>
-          <div className="form-grid-3">
+          <div className="form-grid-4">
             <Field
               label="Selling price"
               type="number"
@@ -742,6 +742,14 @@ export default function AddProduct() {
               value={form.compare_price}
               set={(value) => update("compare_price", value)}
               placeholder="Optional"
+            />
+            <Field
+              label="Stock"
+              type="number"
+              value={form.stock}
+              set={(value) => update("stock", value)}
+              placeholder="0"
+              disabled={variants.length > 0}
             />
             <Field
               label="Low-stock threshold"
