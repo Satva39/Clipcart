@@ -2,6 +2,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
+from flask import current_app
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
@@ -40,9 +42,15 @@ class CheckoutService:
     def _provision_shiprocket(order):
         try:
             return ShiprocketService.ensure_order_shipments(order.id)
-        except Exception:
+        except Exception as exc:
             # Shiprocket is downstream of the already-verified Clipcart order.
-            # Never turn a courier outage into a payment/refund failure.
+            # Never turn a courier outage into a payment/refund failure, but make
+            # the integration failure visible in server logs for recovery.
+            current_app.logger.exception(
+                "Shiprocket provisioning failed for Clipcart order %s: %s",
+                order.id,
+                str(exc)[:500],
+            )
             return []
 
     @staticmethod

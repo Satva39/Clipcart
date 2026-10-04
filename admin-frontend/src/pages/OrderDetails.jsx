@@ -228,7 +228,20 @@ export default function OrderDetails() {
                         shipment.supplier?.name ||
                         "—"}
                     </td>
-                    <td>{shipment.status || "—"}</td>
+                    <td>
+                      <div>{shipment.status || "—"}</div>
+                      {shipment.failure?.message ? (
+                        <small
+                          style={{
+                            display: "block",
+                            marginTop: "0.25rem",
+                            opacity: 0.8,
+                          }}
+                        >
+                          {shipment.failure.message}
+                        </small>
+                      ) : null}
+                    </td>
                     <td>{shipment.courier_name || "Awaiting assignment"}</td>
                     <td>{shipment.awb_code || "Awaiting assignment"}</td>
                     <td>

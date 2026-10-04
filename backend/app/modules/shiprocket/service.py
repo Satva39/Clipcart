@@ -316,7 +316,7 @@ class ShiprocketService:
                 code="SUPPLIER_PICKUP_INCOMPLETE",
             )
         if (
-            len(values["address"]) > 255
+            len(values["address"]) > 80
             or len(values["city"]) > 100
             or len(values["state"]) > 100
         ):
@@ -354,7 +354,11 @@ class ShiprocketService:
         locations = cls._request("GET", "/settings/company/pickup")
         rows = []
         if isinstance(locations, dict):
-            rows = locations.get("data") or locations.get("shipping_address") or []
+            data = locations.get("data")
+            if isinstance(data, dict):
+                rows = data.get("shipping_address") or data.get("data") or []
+            else:
+                rows = locations.get("shipping_address") or data or []
         elif isinstance(locations, list):
             rows = locations
 
@@ -569,8 +573,10 @@ class ShiprocketService:
 
     @staticmethod
     def _supplier_key(order_id, supplier_id):
-        value = f"CC-{order_id}-{supplier_id}"
-        return value[:50]
+        # Shiprocket's custom-order documentation advises numeric source order IDs.
+        # Fixed-width components keep this deterministic and collision-free for the
+        # normal Clipcart integer ID ranges while staying well below 50 characters.
+        return f"{int(order_id):08d}{int(supplier_id):08d}"
 
     @classmethod
     def _find_existing_order(cls, reference):
@@ -1074,6 +1080,15 @@ class ShiprocketService:
                     if not shipment:
                         raise
             try:
+                # Failed pre-provision records may have the legacy reference format.
+                # Re-key only records that never reached Shiprocket so a retry uses the
+                # numeric reference expected by the current API contract.
+                if (
+                    not shipment.shiprocket_order_id
+                    and shipment.shiprocket_reference_id != reference
+                ):
+                    shipment.shiprocket_reference_id = reference
+                    db.session.commit()
                 cls._provision_shipment(shipment)
             except ShiprocketError as exc:
                 shipment.status = "FAILED"
