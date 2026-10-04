@@ -86,7 +86,7 @@ export default function ProductPage() {
       (Array.isArray(product?.variants) ? product.variants : []).filter(
         (item) => item && item.is_active !== false,
       ),
-    [product?.variants],
+    [product],
   );
 
   const variant = useMemo(
@@ -101,6 +101,7 @@ export default function ProductPage() {
 
   useEffect(() => {
     if (!availableVariants.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (selectedVariantId !== null) setSelectedVariantId(null);
       return;
     }

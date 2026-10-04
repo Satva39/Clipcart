@@ -34,6 +34,6 @@ export async function updateSupplierOrderStatus(orderId, status) {
 export async function importSupplierOrders(file) {
   const form = new FormData();
   form.append("file", file);
-  const response = await api.post("/supplier/portal/import/orders", form);
+  const response = await api.post("/orders/supplier/import", form);
   return response.data;
 }

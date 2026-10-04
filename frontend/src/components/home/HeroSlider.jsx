@@ -69,12 +69,6 @@ export default function HeroSlider({ banners = [] }) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    setIndex((current) =>
-      Math.min(current, Math.max(0, heroBanners.length - 1)),
-    );
-  }, [heroBanners.length]);
-
-  useEffect(() => {
     if (heroBanners.length < 2) return undefined;
 
     const timer = window.setInterval(
@@ -89,7 +83,7 @@ export default function HeroSlider({ banners = [] }) {
     return <StaticHero />;
   }
 
-  const item = heroBanners[index];
+  const item = heroBanners[Math.min(index, heroBanners.length - 1)];
 
   return (
     <section

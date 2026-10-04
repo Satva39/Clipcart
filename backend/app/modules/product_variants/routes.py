@@ -1,5 +1,6 @@
 from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity
+
 from sqlalchemy.orm import selectinload
 
 from app.core.decorators import active_supplier_required

@@ -98,18 +98,15 @@ export default function OrderDetail() {
   const [nextAction, setNextAction] = useState("Reschedule delivery");
   const [modal, setModal] = useState("");
   const [deliveryPhoto, setDeliveryPhoto] = useState(null);
-  const [deliveryPhotoPreview, setDeliveryPhotoPreview] = useState("");
+  const deliveryPhotoPreview = useMemo(
+    () => (deliveryPhoto ? URL.createObjectURL(deliveryPhoto) : ""),
+    [deliveryPhoto],
+  );
 
   useEffect(() => {
-    if (!deliveryPhoto) {
-      setDeliveryPhotoPreview("");
-      return undefined;
-    }
-
-    const url = URL.createObjectURL(deliveryPhoto);
-    setDeliveryPhotoPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [deliveryPhoto]);
+    if (!deliveryPhotoPreview) return undefined;
+    return () => URL.revokeObjectURL(deliveryPhotoPreview);
+  }, [deliveryPhotoPreview]);
 
   async function loadOrder() {
     try {

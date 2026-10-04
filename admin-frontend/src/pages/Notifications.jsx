@@ -24,6 +24,7 @@ export default function Notifications() {
     }
   }
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
   async function read(id) {

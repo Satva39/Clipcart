@@ -69,7 +69,6 @@ export default function DeliveryQueue() {
   const knownIds = useRef(new Set());
   const [newOrderCount, setNewOrderCount] = useState(0);
   const [returns, setReturns] = useState([]);
-  const [returnError, setReturnError] = useState("");
 
   const loadQueue = useCallback(
     async (silent = false) => {

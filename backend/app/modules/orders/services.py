@@ -18,6 +18,7 @@ from app.modules.supplier_orders.models import DeliveryAssignment
 from app.modules.notifications.enums import NotificationType
 from app.modules.notifications.services import NotificationService
 from app.modules.admin.services import AdminNotificationService
+from app.modules.shiprocket.service import ShiprocketService
 
 from .enums import OrderStatus
 from .models import Order

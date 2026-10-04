@@ -29,6 +29,7 @@ export default function Logistics() {
   useEffect(() => {
     const id = setTimeout(load, 250);
     return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
   async function add(e) {
     e.preventDefault();
