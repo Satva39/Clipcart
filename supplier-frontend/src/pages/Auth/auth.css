@@ -1,0 +1,336 @@
+.auth-page-modern {
+    min-height: 100vh;
+    background: radial-gradient(circle at top, #eef3fb 0, #f7f9fc 42%, #f3f5f8 100%);
+    display: grid;
+    place-items: center;
+    padding: 28px 16px
+}
+
+.auth-card-modern,
+.payment-card-modern {
+    width: min(900px, 100%);
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 24px;
+    box-shadow: 0 22px 70px #10182812;
+    padding: 34px
+}
+
+.auth-card-modern {
+    max-width: 500px
+}
+
+.auth-card-register {
+    max-width: 860px
+}
+
+.payment-card-modern {
+    max-width: 650px;
+    text-align: center
+}
+
+.auth-brand {
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: .12em;
+    color: #111827
+}
+
+.auth-brand span {
+    display: block;
+    font-size: 9px;
+    color: #8a98aa;
+    letter-spacing: .22em;
+    margin-top: 4px
+}
+
+.auth-eyebrow {
+    text-transform: uppercase;
+    letter-spacing: .15em;
+    color: #8a98aa;
+    font-weight: 900;
+    font-size: 9px;
+    margin-top: 28px
+}
+
+.auth-card-modern h1,
+.payment-card-modern h1 {
+    font-size: 30px;
+    letter-spacing: -.045em;
+    margin: 7px 0
+}
+
+.auth-subtitle {
+    color: #728095;
+    font-size: 12px;
+    line-height: 1.7;
+    margin: 0 0 23px
+}
+
+.auth-card-modern form {
+    display: flex;
+    flex-direction: column;
+    gap: 13px
+}
+
+.auth-card-modern label {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 800;
+    color: #334155
+}
+
+.auth-card-modern input {
+    display: block;
+    width: 100%;
+    height: 44px;
+    margin-top: 7px;
+    border: 1px solid #dbe2ea;
+    border-radius: 11px;
+    padding: 0 12px;
+    outline: none;
+    color: #1e293b;
+    background: #fff
+}
+
+.auth-card-modern input:focus {
+    border-color: #64748b;
+    box-shadow: 0 0 0 4px #64748b12
+}
+
+.auth-card-modern form>button,
+.payment-main-btn {
+    height: 46px;
+    border: 0;
+    border-radius: 12px;
+    background: #111827;
+    color: #fff;
+    font-weight: 800;
+    margin-top: 4px
+}
+
+.auth-card-modern button:disabled {
+    opacity: .55
+}
+
+.auth-error {
+    background: #fff1f2;
+    color: #b42318;
+    border: 1px solid #fecdd3;
+    border-radius: 12px;
+    padding: 11px 12px;
+    font-size: 11px;
+    margin-bottom: 14px;
+    text-align: left
+}
+
+.auth-footer {
+    font-size: 11px;
+    color: #788597;
+    text-align: center;
+    margin: 20px 0 0
+}
+
+.auth-footer a,
+.back-link {
+    color: #111827;
+    font-weight: 800;
+    text-decoration: none
+}
+
+.register-form {
+    gap: 18px !important
+}
+
+.form-section {
+    border-top: 1px solid #edf1f5;
+    padding-top: 18px
+}
+
+.form-section h3 {
+    text-align: left;
+    margin: 0 0 11px;
+    font-size: 13px
+}
+
+.form-section p {
+    font-size: 11px;
+    color: #8190a2;
+    margin: 0 0 12px;
+    text-align: left
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 13px
+}
+
+.optional {
+    font-size: 9px;
+    color: #9aa5b4;
+    font-weight: 600;
+    margin-left: 4px
+}
+
+.fee-box-modern {
+    display: flex;
+    gap: 13px;
+    align-items: center;
+    text-align: left;
+    background: #f8fafc;
+    border: 1px solid #e5eaf1;
+    border-radius: 14px;
+    padding: 13px
+}
+
+.fee-box-modern strong {
+    font-size: 24px
+}
+
+.fee-box-modern b,
+.fee-box-modern span {
+    display: block
+}
+
+.fee-box-modern b {
+    font-size: 11px
+}
+
+.fee-box-modern span {
+    font-size: 10px;
+    color: #7c8898;
+    margin-top: 3px
+}
+
+.payment-amount {
+    font-size: 72px;
+    font-weight: 900;
+    letter-spacing: -.08em;
+    margin: 20px 0 18px
+}
+
+.payment-amount span {
+    font-size: 30px;
+    vertical-align: middle;
+    margin-right: 5px;
+    color: #64748b
+}
+
+.payment-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 9px;
+    margin-bottom: 16px
+}
+
+.payment-meta div {
+    background: #f8fafc;
+    border: 1px solid #e7ebf1;
+    border-radius: 12px;
+    padding: 10px
+}
+
+.payment-meta span,
+.payment-meta b {
+    display: block
+}
+
+.payment-meta span {
+    font-size: 9px;
+    color: #8793a4;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: .08em
+}
+
+.payment-meta b {
+    font-size: 11px;
+    margin-top: 4px
+}
+
+.payment-main-btn {
+    width: 100%;
+    font-size: 13px
+}
+
+.auth-note {
+    font-size: 10px;
+    line-height: 1.6;
+    color: #8793a4
+}
+
+.back-link {
+    font-size: 11px
+}
+
+@media(max-width:650px) {
+
+    .auth-card-modern,
+    .payment-card-modern {
+        padding: 24px;
+        border-radius: 20px
+    }
+
+    .form-grid,
+    .payment-meta {
+        grid-template-columns: 1fr
+    }
+
+    .auth-card-modern h1,
+    .payment-card-modern h1 {
+        font-size: 25px
+    }
+
+    .payment-amount {
+        font-size: 60px
+    }
+}
+
+/* Supplier-only password field wrapper keeps the eye control inside the input. */
+.password-input-modern {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    margin-top: 0;
+}
+
+.password-input-modern input {
+    margin-top: 7px;
+    padding-right: 48px;
+}
+
+.password-input-modern .password-toggle-modern {
+    position: absolute;
+    right: 7px;
+    top: calc(50% + 3.5px);
+    transform: translateY(-50%);
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: #7f8ea0;
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.password-input-modern .password-toggle-modern:hover {
+    background: #f2f5f8;
+    border-color: #d7dee6;
+    color: #17202a;
+}
+
+.password-input-modern .password-toggle-modern:focus-visible {
+    outline: 2px solid #ffb703;
+    outline-offset: 1px;
+}

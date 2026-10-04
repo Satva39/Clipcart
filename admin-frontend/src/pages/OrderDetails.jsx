@@ -1,0 +1,219 @@
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  FaArrowLeft,
+  FaBoxOpen,
+  FaCreditCard,
+  FaMapMarkerAlt,
+  FaUser,
+} from "react-icons/fa";
+
+import { getAdminOrder } from "../services/orderService";
+
+export default function OrderDetails() {
+  const { orderId } = useParams();
+
+  const [order, setOrder] = useState(null);
+
+  const [loading, setLoading] = useState(true);
+
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadOrder() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data = await getAdminOrder(orderId);
+
+        setOrder(data);
+      } catch (err) {
+        setError(err?.response?.data?.message || "Unable to load order.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadOrder();
+  }, [orderId]);
+
+  if (loading) {
+    return (
+      <div className="admin-page">
+        <div className="admin-empty">Loading order...</div>
+      </div>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <div className="admin-page">
+        <Link to="/orders" className="admin-back-link">
+          <FaArrowLeft />
+          Back to Orders
+        </Link>
+
+        <div className="admin-error">{error || "Order not found."}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-page">
+      <Link to="/orders" className="admin-back-link">
+        <FaArrowLeft />
+        Back to Orders
+      </Link>
+
+      <div className="admin-page-header">
+        <div>
+          <span className="admin-eyebrow">ORDER DETAILS</span>
+
+          <h1>Order #{order.id}</h1>
+
+          <p>Complete platform order information.</p>
+        </div>
+
+        <span
+          className={`admin-order-status admin-order-${String(
+            order.status,
+          ).toLowerCase()}`}
+        >
+          {order.status}
+        </span>
+      </div>
+
+      <div className="admin-detail-grid">
+        <section className="admin-detail-card">
+          <div className="admin-detail-title">
+            <FaUser />
+            <h2>Customer</h2>
+          </div>
+
+          <p>
+            <strong>{order.customer?.name || "—"}</strong>
+          </p>
+
+          <p>{order.customer?.email || "—"}</p>
+
+          <p>{order.customer?.phone || "No phone"}</p>
+        </section>
+
+        <section className="admin-detail-card">
+          <div className="admin-detail-title">
+            <FaMapMarkerAlt />
+            <h2>Delivery Address</h2>
+          </div>
+
+          {order.address ? (
+            <>
+              <p>
+                <strong>{order.address.full_name}</strong>
+              </p>
+
+              <p>{order.address.address_line_1}</p>
+
+              {order.address.address_line_2 && (
+                <p>{order.address.address_line_2}</p>
+              )}
+
+              <p>
+                {order.address.city}, {order.address.state}
+              </p>
+
+              <p>
+                {order.address.postal_code}, {order.address.country}
+              </p>
+            </>
+          ) : (
+            <p>No address available.</p>
+          )}
+        </section>
+
+        <section className="admin-detail-card">
+          <div className="admin-detail-title">
+            <FaCreditCard />
+            <h2>Payment</h2>
+          </div>
+
+          {order.payment ? (
+            <>
+              <p>
+                Status: <strong>{order.payment.status}</strong>
+              </p>
+
+              <p>Gateway: {order.payment.gateway}</p>
+
+              <p>Type: {order.payment.payment_type}</p>
+
+              <p>Transaction: {order.payment.transaction_id || "—"}</p>
+            </>
+          ) : (
+            <p>No payment record.</p>
+          )}
+        </section>
+
+        <section className="admin-detail-card">
+          <div className="admin-detail-title">
+            <FaBoxOpen />
+            <h2>Order Summary</h2>
+          </div>
+
+          <div className="admin-total-row">
+            <span>Subtotal</span>
+            <strong>₹{Number(order.subtotal).toLocaleString("en-IN")}</strong>
+          </div>
+
+          <div className="admin-total-row">
+            <span>Discount</span>
+            <strong>₹{Number(order.discount).toLocaleString("en-IN")}</strong>
+          </div>
+
+          <div className="admin-total-row admin-grand-total">
+            <span>Total</span>
+            <strong>₹{Number(order.total).toLocaleString("en-IN")}</strong>
+          </div>
+        </section>
+      </div>
+
+      <section className="admin-detail-card admin-items-card">
+        <div className="admin-detail-title">
+          <FaBoxOpen />
+          <h2>Order Items</h2>
+        </div>
+
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Subtotal</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {order.items.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <strong>{item.product_name}</strong>
+
+                    {item.variant_name && <span>{item.variant_name}</span>}
+                  </td>
+
+                  <td>{item.quantity}</td>
+
+                  <td>₹{Number(item.unit_price).toLocaleString("en-IN")}</td>
+
+                  <td>₹{Number(item.subtotal).toLocaleString("en-IN")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}

@@ -1,0 +1,103 @@
+.registration-payment-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    background: #0f172a;
+}
+
+.registration-payment-card {
+    width: 100%;
+    max-width: 520px;
+    padding: 40px;
+    border: 1px solid #334155;
+    border-radius: 20px;
+    background: #1e293b;
+    color: #f8fafc;
+}
+
+.registration-payment-logo {
+    color: #ffb703;
+    font-size: 32px;
+    font-weight: 900;
+}
+
+.registration-payment-card h1 {
+    margin-top: 16px;
+    font-size: 30px;
+}
+
+.registration-payment-subtitle {
+    margin-top: 8px;
+    color: #94a3b8;
+    line-height: 1.6;
+}
+
+.registration-payment-amount {
+    margin: 30px 0;
+    font-size: 64px;
+    font-weight: 900;
+    color: #ffb703;
+}
+
+.registration-payment-amount span {
+    font-size: 36px;
+}
+
+.registration-payment-info {
+    border: 1px solid #334155;
+    border-radius: 14px;
+    padding: 18px;
+    background: #0f172a;
+}
+
+.registration-payment-info div {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 12px 0;
+    border-bottom: 1px solid #1e293b;
+}
+
+.registration-payment-info div:last-child {
+    border-bottom: 0;
+}
+
+.registration-payment-info span {
+    color: #94a3b8;
+}
+
+.registration-payment-button {
+    width: 100%;
+    margin-top: 24px;
+    border: 0;
+    border-radius: 12px;
+    padding: 15px;
+    background: #ffb703;
+    color: #111827;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.registration-payment-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.registration-payment-error {
+    margin-top: 18px;
+    border: 1px solid #ef4444;
+    border-radius: 10px;
+    padding: 12px;
+    color: #fca5a5;
+    background: #7f1d1d33;
+}
+
+.registration-payment-note {
+    margin-top: 16px;
+    text-align: center;
+    color: #64748b;
+    font-size: 13px;
+}

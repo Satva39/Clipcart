@@ -1,0 +1,54 @@
+# ================================
+# Python Cache
+# ================================
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# ================================
+# Virtual Environment
+# ================================
+
+venv/
+.venv/
+
+# ================================
+# Environment Variables
+# ================================
+
+.env
+
+# ================================
+# Flask
+# ================================
+
+instance/
+.flaskenv
+
+# ================================
+# Storage
+# ================================
+
+storage/temp/*
+storage/exports/*
+storage/invoices/*
+
+!storage/temp/.gitkeep
+!storage/exports/.gitkeep
+!storage/invoices/.gitkeep
+
+# ================================
+# Testing
+# ================================
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ================================
+# Miscellaneous
+# ================================
+
+*.log

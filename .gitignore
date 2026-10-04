@@ -1,0 +1,97 @@
+# ================================
+# Operating System Files
+# ================================
+
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ================================
+# Logs
+# ================================
+
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ================================
+# Environment Variables
+# ================================
+
+.env
+.env.*
+!.env.example
+
+# ================================
+# Python
+# ================================
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual Environment
+venv/
+.venv/
+
+# ================================
+# Node
+# ================================
+
+node_modules/
+npm-cache/
+
+# ================================
+# Build Files
+# ================================
+
+dist/
+build/
+coverage/
+
+# ================================
+# IDE
+# ================================
+
+.vscode/
+.idea/
+
+# ================================
+# Database
+# ================================
+
+*.sqlite
+*.sqlite3
+
+# ================================
+# Uploads & Storage
+# ================================
+
+backend/storage/temp/*
+backend/storage/exports/*
+backend/storage/invoices/*
+
+!backend/storage/temp/.gitkeep
+!backend/storage/exports/.gitkeep
+!backend/storage/invoices/.gitkeep
+
+# ================================
+# Cache
+# ================================
+
+.cache/
+.pytest_cache/
+.mypy_cache/
+
+# ================================
+# Miscellaneous
+# ================================
+
+*.tmp
+*.swp
+*.swo

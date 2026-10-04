@@ -1,0 +1,126 @@
+.admin-dashboard {
+    min-height: 100%;
+    padding: 32px;
+    color: #f8fafc;
+}
+
+.dashboard-header {
+    margin-bottom: 30px;
+}
+
+.dashboard-eyebrow {
+    color: #ffb703;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+}
+
+.dashboard-header h1 {
+    margin: 8px 0 6px;
+    font-size: 36px;
+    font-weight: 900;
+}
+
+.dashboard-header p {
+    margin: 0;
+    color: #94a3b8;
+}
+
+.dashboard-error {
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    border: 1px solid #7f1d1d;
+    border-radius: 10px;
+    background: #3a1518;
+    color: #fca5a5;
+}
+
+.dashboard-loading {
+    padding: 60px 20px;
+    text-align: center;
+    color: #64748b;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 22px;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    background: #1e293b;
+    transition:
+        transform 0.2s ease,
+        border-color 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    border-color: #475569;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: #0f172a;
+    color: #ffb703;
+    font-size: 19px;
+}
+
+.stat-card span {
+    display: block;
+    margin-bottom: 5px;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.stat-card strong {
+    font-size: 25px;
+    font-weight: 900;
+}
+
+.dashboard-panel {
+    margin-top: 22px;
+    padding: 26px;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    background: #1e293b;
+}
+
+.dashboard-panel h2 {
+    margin: 0 0 6px;
+    font-size: 20px;
+}
+
+.dashboard-panel p {
+    margin: 0;
+    color: #94a3b8;
+}
+
+@media (max-width: 900px) {
+    .stats-grid {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .admin-dashboard {
+        padding: 20px;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}

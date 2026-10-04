@@ -1,0 +1,12 @@
+from enum import Enum
+
+
+class OrderStatus(str, Enum):
+    PENDING = "PENDING"
+    PAID = "PAID"
+    PROCESSING = "PROCESSING"
+    SHIPPED = "SHIPPED"
+    OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+    RETURNED = "RETURNED"

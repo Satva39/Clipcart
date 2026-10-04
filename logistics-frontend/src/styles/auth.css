@@ -1,0 +1,183 @@
+.logistics-auth-shell {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+        radial-gradient(circle at 15% 20%, rgba(255, 209, 102, .08), transparent 25%),
+        #0b1220;
+}
+
+.logistics-auth-card {
+    width: min(470px, 100%);
+    padding: 30px;
+    border: 1px solid #26364d;
+    border-radius: 18px;
+    background: #111a2a;
+    box-shadow: 0 28px 80px rgba(0, 0, 0, .26);
+}
+
+.logistics-auth-icon {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 18px;
+    border-radius: 12px;
+    background: #1c2a3e;
+    color: #ffd166;
+}
+
+.logistics-auth-brand {
+    color: #8291a7;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .18em;
+}
+
+.logistics-auth-card h1 {
+    margin: 10px 0 0;
+    color: #edf3f8;
+    font-size: 29px;
+    letter-spacing: -.03em;
+}
+
+.logistics-auth-subtitle {
+    margin: 9px 0 20px;
+    color: #8392a8;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.logistics-security-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+    padding: 10px 11px;
+    border: 1px solid #2b3b52;
+    border-radius: 10px;
+    background: #0f1828;
+    color: #8d9db4;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.logistics-security-note svg {
+    flex: 0 0 auto;
+    color: #91ba9c;
+}
+
+.logistics-auth-error {
+    margin-bottom: 16px;
+    padding: 11px 12px;
+    border: 1px solid #5e3239;
+    border-radius: 10px;
+    background: #24161b;
+    color: #f2b3b3;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.logistics-auth-form {
+    display: grid;
+    gap: 8px;
+}
+
+.logistics-auth-form label {
+    margin-top: 6px;
+    color: #d6e0ea;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.logistics-auth-form input {
+    width: 100%;
+    height: 46px;
+    border: 1px solid #304159;
+    border-radius: 10px;
+    outline: none;
+    background: #0d1727;
+    color: #eaf0f5;
+    padding: 0 12px;
+    font-size: 13px;
+}
+
+.logistics-auth-form input:focus {
+    border-color: #6b7892;
+    box-shadow: 0 0 0 3px rgba(255, 209, 102, .06);
+}
+
+.logistics-auth-form button {
+    min-height: 46px;
+    margin-top: 10px;
+    border: 0;
+    border-radius: 10px;
+    background: #ffd166;
+    color: #202937;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.logistics-auth-form button:hover {
+    background: #f4ca62;
+}
+
+.logistics-auth-form button:disabled {
+    opacity: .65;
+    cursor: not-allowed;
+}
+
+@media (max-width: 500px) {
+    .logistics-auth-shell {
+        padding: 14px;
+    }
+
+    .logistics-auth-card {
+        padding: 22px;
+    }
+}
+
+.logistics-password-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.logistics-password-field input {
+    padding-right: 46px;
+}
+
+.logistics-auth-form .logistics-password-toggle {
+    position: absolute;
+    right: 7px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent !important;
+    color: #8e9bb0;
+    font-weight: 500;
+    line-height: 1;
+    transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.logistics-auth-form .logistics-password-toggle:hover {
+    background: #17263a !important;
+    border-color: #31445f;
+    color: #f5f8fb;
+}
+
+.logistics-auth-form .logistics-password-toggle:focus-visible {
+    outline: 2px solid #ffd166;
+    outline-offset: 1px;
+}
