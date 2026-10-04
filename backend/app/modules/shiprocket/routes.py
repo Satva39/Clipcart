@@ -65,6 +65,13 @@ def admin_retry_shipments(order_id):
     )
 
 
+@shiprocket_bp.get("/admin/shiprocket/diagnostics")
+@admin_authorized
+def shiprocket_diagnostics():
+    order_id = request.args.get("order_id", type=int)
+    return success(data=ShiprocketService.diagnostics(order_id=order_id))
+
+
 @shiprocket_bp.get("/admin/shipments/<int:order_id>")
 @admin_authorized
 def admin_shipments(order_id):

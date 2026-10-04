@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import threading
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -190,8 +191,17 @@ class ShiprocketService:
         try:
             body = response.json()
             message = str(body.get("message") or body.get("error") or fallback)
-            if len(message) > 500:
-                message = message[:500]
+            details = body.get("errors") or body.get("error_details")
+            if details:
+                try:
+                    detail_text = json.dumps(
+                        details, ensure_ascii=False, sort_keys=True
+                    )
+                except TypeError:
+                    detail_text = str(details)
+                message = f"{message}: {detail_text}"
+            if len(message) > 1000:
+                message = message[:1000]
         except ValueError:
             message = fallback
         return ShiprocketError(
@@ -237,8 +247,21 @@ class ShiprocketService:
                 ) from exc
 
         if response.status_code >= 400:
+            app_logger = current_app.logger
+            app_logger.error(
+                "Shiprocket API request failed: %s %s -> HTTP %s",
+                method.upper(),
+                path,
+                response.status_code,
+            )
             raise cls._response_error(response, "Shiprocket API request failed.")
 
+        current_app.logger.info(
+            "Shiprocket API request succeeded: %s %s -> HTTP %s",
+            method.upper(),
+            path,
+            response.status_code,
+        )
         try:
             return response.json()
         except ValueError as exc:
@@ -356,9 +379,17 @@ class ShiprocketService:
         if isinstance(locations, dict):
             data = locations.get("data")
             if isinstance(data, dict):
-                rows = data.get("shipping_address") or data.get("data") or []
+                rows = (
+                    data.get("shipping_address") or data.get("pickup_locations") or []
+                )
+            elif isinstance(data, list):
+                rows = data
             else:
-                rows = locations.get("shipping_address") or data or []
+                rows = (
+                    locations.get("shipping_address")
+                    or locations.get("pickup_locations")
+                    or []
+                )
         elif isinstance(locations, list):
             rows = locations
 
@@ -383,7 +414,7 @@ class ShiprocketService:
                     "name": str(cls._pick(row, "pickup_location") or "").strip(),
                 }
 
-        location_name = f"CC-{supplier_id}-{cls._pickup_fingerprint(values)}"[:100]
+        location_name = f"CC{int(supplier_id)}-{cls._pickup_fingerprint(values)}"[:36]
         payload = {
             "pickup_location": location_name,
             "name": values["name"],
@@ -425,7 +456,7 @@ class ShiprocketService:
                     code="PACKAGE_DATA_MISSING",
                 )
             weight, length, width, height = [Decimal(str(value)) for value in values]
-            if min(weight, length, width, height) <= 0:
+            if weight <= 0 or min(length, width, height) <= Decimal("0.5"):
                 raise ShiprocketError(
                     f"Shipping package data is invalid for product '{product.name}'.",
                     code="PACKAGE_DATA_INVALID",
@@ -467,6 +498,14 @@ class ShiprocketService:
             raise ShiprocketError(
                 "Customer delivery city is too long for Shiprocket.",
                 code="CUSTOMER_CITY_INVALID",
+            )
+        phone_digits = re.sub(r"\D", "", str(order.delivery_phone or ""))
+        if phone_digits.startswith("91") and len(phone_digits) == 12:
+            phone_digits = phone_digits[2:]
+        if len(phone_digits) != 10:
+            raise ShiprocketError(
+                "Customer delivery phone must contain a valid 10-digit Indian mobile number.",
+                code="CUSTOMER_PHONE_INVALID",
             )
 
         package = cls._package_dimensions(items)
@@ -521,7 +560,11 @@ class ShiprocketService:
             if order_subtotal > 0
             else Decimal("0")
         )
-        comment = f"Clipcart platform fee/tax allocated to supplier shipment: marketing fee ₹{marketing_allocation:.2f}, tax ₹{tax_allocation:.2f}."
+        transaction_charges = marketing_allocation + tax_allocation
+        comment = (
+            "Clipcart supplier shipment allocation: "
+            f"marketing fee ₹{marketing_allocation:.2f}, tax ₹{tax_allocation:.2f}."
+        )
         return {
             "order_id": supplier_key,
             "order_date": (order.created_at or datetime.utcnow()).strftime(
@@ -538,7 +581,7 @@ class ShiprocketService:
             "billing_state": (order.delivery_state or "").strip(),
             "billing_country": (order.delivery_country or "India").strip(),
             "billing_email": (order.customer_email or "").strip(),
-            "billing_phone": (order.delivery_phone or "").strip(),
+            "billing_phone": int(phone_digits),
             "shipping_is_billing": True,
             "shipping_customer_name": (
                 order.delivery_full_name or order.customer_name or "Customer"
@@ -550,14 +593,13 @@ class ShiprocketService:
             "shipping_state": (order.delivery_state or "").strip(),
             "shipping_country": (order.delivery_country or "India").strip(),
             "shipping_email": (order.customer_email or "").strip(),
-            "shipping_phone": (order.delivery_phone or "").strip(),
+            "shipping_phone": int(phone_digits),
             "order_items": order_items,
             "payment_method": "Prepaid",
             "shipping_charges": 0,
             "giftwrap_charges": 0,
-            "transaction_charges": float(marketing_allocation),
+            "transaction_charges": float(transaction_charges),
             "total_discount": float(supplier_discount),
-            "tax": float(tax_allocation),
             "comment": comment,
             "sub_total": float(
                 max(supplier_subtotal - supplier_discount, Decimal("0"))
@@ -573,10 +615,36 @@ class ShiprocketService:
 
     @staticmethod
     def _supplier_key(order_id, supplier_id):
-        # Shiprocket's custom-order documentation advises numeric source order IDs.
-        # Fixed-width components keep this deterministic and collision-free for the
-        # normal Clipcart integer ID ranges while staying well below 50 characters.
-        return f"{int(order_id):08d}{int(supplier_id):08d}"
+        # Shiprocket advises numeric channel order IDs for interoperability with
+        # other order APIs. Keep the reference deterministic so retries are idempotent.
+        order_id = int(order_id)
+        supplier_id = int(supplier_id)
+        return str(order_id * 10_000_000_000 + supplier_id)
+
+    @classmethod
+    def _repair_legacy_reference(cls, shipment):
+        legacy = str(shipment.shiprocket_reference_id or "").strip()
+        if not legacy.startswith("CC-"):
+            return False
+        try:
+            _, order_id, supplier_id = legacy.split("-", 2)
+            replacement = cls._supplier_key(int(order_id), int(supplier_id))
+        except (ValueError, AttributeError):
+            return False
+        if replacement == legacy:
+            return False
+        conflict = Shipment.query.filter(
+            Shipment.shiprocket_reference_id == replacement,
+            Shipment.id != shipment.id,
+        ).first()
+        if conflict:
+            raise ShiprocketError(
+                "A conflicting Clipcart Shiprocket reference already exists.",
+                code="REFERENCE_CONFLICT",
+            )
+        shipment.shiprocket_reference_id = replacement
+        db.session.commit()
+        return True
 
     @classmethod
     def _find_existing_order(cls, reference):
@@ -649,6 +717,15 @@ class ShiprocketService:
 
     @classmethod
     def _create_shiprocket_order(cls, shipment, order, supplier_id, items):
+        # Recover any pre-existing external order before doing other remote calls.
+        # This is important when an earlier create request succeeded remotely but
+        # the response was lost.
+        legacy_reference = str(shipment.shiprocket_reference_id or "").strip()
+        existing = cls._find_existing_order(legacy_reference)
+        if cls._apply_reconciled_order(shipment, existing):
+            return
+        cls._repair_legacy_reference(shipment)
+
         pickup = cls._get_or_create_pickup(supplier_id)
         shipment.pickup_location_id = pickup["id"] or None
         shipment.pickup_location = pickup["name"] or None
@@ -986,6 +1063,12 @@ class ShiprocketService:
 
     @classmethod
     def _provision_shipment(cls, shipment):
+        current_app.logger.info(
+            "Starting Shiprocket provisioning for Clipcart order=%s supplier=%s ref=%s",
+            shipment.order_id,
+            shipment.supplier_id,
+            shipment.shiprocket_reference_id,
+        )
         order = (
             Order.query.options(
                 selectinload(Order.items).joinedload(OrderItem.product),
@@ -1018,6 +1101,15 @@ class ShiprocketService:
             cls._request_pickup(shipment)
         if shipment.status != "MANIFEST GENERATED":
             cls._generate_manifest(shipment)
+        current_app.logger.info(
+            "Shiprocket provisioning completed for Clipcart order=%s supplier=%s sr_order=%s sr_shipment=%s awb=%s status=%s",
+            shipment.order_id,
+            shipment.supplier_id,
+            shipment.shiprocket_order_id,
+            shipment.shiprocket_shipment_id,
+            shipment.awb_code,
+            shipment.status,
+        )
         return shipment
 
     @classmethod
@@ -1080,17 +1172,17 @@ class ShiprocketService:
                     if not shipment:
                         raise
             try:
-                # Failed pre-provision records may have the legacy reference format.
-                # Re-key only records that never reached Shiprocket so a retry uses the
-                # numeric reference expected by the current API contract.
-                if (
-                    not shipment.shiprocket_order_id
-                    and shipment.shiprocket_reference_id != reference
-                ):
-                    shipment.shiprocket_reference_id = reference
-                    db.session.commit()
                 cls._provision_shipment(shipment)
             except ShiprocketError as exc:
+                current_app.logger.error(
+                    "Shiprocket provisioning failed: order=%s supplier=%s ref=%s code=%s status=%s message=%s",
+                    order.id,
+                    supplier_id,
+                    shipment.shiprocket_reference_id,
+                    exc.code,
+                    exc.status_code,
+                    str(exc)[:500],
+                )
                 shipment.status = "FAILED"
                 shipment.failure_code = exc.code or "SHIPROCKET_ERROR"
                 shipment.failure_message = str(exc)[:1000]
@@ -1099,6 +1191,12 @@ class ShiprocketService:
                 if propagate:
                     raise
             except Exception as exc:
+                current_app.logger.exception(
+                    "Unexpected Shiprocket provisioning error: order=%s supplier=%s ref=%s",
+                    order.id,
+                    supplier_id,
+                    shipment.shiprocket_reference_id,
+                )
                 db.session.rollback()
                 shipment = Shipment.query.filter_by(
                     order_id=order.id, supplier_id=supplier_id
@@ -1112,6 +1210,19 @@ class ShiprocketService:
                 if propagate:
                     raise
             result.append(shipment)
+        current_app.logger.info(
+            "Shiprocket ensure_order_shipments finished: order=%s shipments=%s",
+            order.id,
+            [
+                {
+                    "supplier_id": row.supplier_id,
+                    "status": row.status,
+                    "awb": row.awb_code,
+                    "failure_code": row.failure_code,
+                }
+                for row in result
+            ],
+        )
         return result
 
     @classmethod
@@ -1143,6 +1254,160 @@ class ShiprocketService:
             data = merged
         cls._refresh_tracking_internal(shipment, data if isinstance(data, dict) else {})
         return shipment
+
+    @classmethod
+    def diagnostics(cls, order_id=None):
+        result = {
+            "configured": cls.configured(),
+            "authentication": {"ok": False},
+            "orders_api": {"ok": False},
+            "pickup_api": {"ok": False, "count": 0},
+            "order": None,
+            "external_matches": [],
+        }
+        if not result["configured"]:
+            result["error"] = (
+                "Shiprocket credentials/base URL are not configured on the backend."
+            )
+            return result
+
+        try:
+            cls._auth()
+            result["authentication"] = {"ok": True}
+        except ShiprocketError as exc:
+            result["authentication"] = {
+                "ok": False,
+                "code": exc.code,
+                "status_code": exc.status_code,
+                "message": str(exc),
+            }
+            result["error"] = "Shiprocket authentication failed."
+            return result
+
+        try:
+            payload = cls._request(
+                "GET",
+                "/orders",
+                params={"per_page": 1, "page": 1},
+            )
+            rows = payload.get("data") if isinstance(payload, dict) else None
+            result["orders_api"] = {
+                "ok": True,
+                "sample_count": len(rows) if isinstance(rows, list) else 0,
+            }
+        except ShiprocketError as exc:
+            result["orders_api"] = {
+                "ok": False,
+                "code": exc.code,
+                "status_code": exc.status_code,
+                "message": str(exc),
+            }
+
+        try:
+            payload = cls._request("GET", "/settings/company/pickup")
+            rows = []
+            if isinstance(payload, dict):
+                data = payload.get("data")
+                if isinstance(data, dict):
+                    rows = (
+                        data.get("shipping_address")
+                        or data.get("pickup_locations")
+                        or []
+                    )
+                elif isinstance(data, list):
+                    rows = data
+                else:
+                    rows = (
+                        payload.get("shipping_address")
+                        or payload.get("pickup_locations")
+                        or []
+                    )
+            elif isinstance(payload, list):
+                rows = payload
+            result["pickup_api"] = {
+                "ok": True,
+                "count": len(rows) if isinstance(rows, list) else 0,
+            }
+        except ShiprocketError as exc:
+            result["pickup_api"] = {
+                "ok": False,
+                "code": exc.code,
+                "status_code": exc.status_code,
+                "message": str(exc),
+            }
+
+        if order_id is None:
+            return result
+
+        order = Order.query.get(int(order_id))
+        if not order:
+            result["order"] = {"ok": False, "message": "Clipcart order not found."}
+            return result
+
+        shipments = (
+            Shipment.query.filter_by(order_id=order.id).order_by(Shipment.id).all()
+        )
+        result["order"] = {
+            "ok": True,
+            "order_id": order.id,
+            "order_status": order.status.value if order.status else None,
+            "local_shipments": [
+                {
+                    "id": row.id,
+                    "supplier_id": row.supplier_id,
+                    "reference_id": row.shiprocket_reference_id,
+                    "status": row.status,
+                    "shiprocket_order_id": row.shiprocket_order_id,
+                    "shiprocket_shipment_id": row.shiprocket_shipment_id,
+                    "awb_code": row.awb_code,
+                    "failure_code": row.failure_code,
+                    "failure_message": row.failure_message,
+                }
+                for row in shipments
+            ],
+        }
+
+        if not result["orders_api"]["ok"]:
+            return result
+
+        supplier_ids = sorted(
+            {
+                item.product.seller_id
+                for item in order.items
+                if item.product and item.product.seller_id
+            }
+        )
+        for supplier_id in supplier_ids:
+            reference = cls._supplier_key(order.id, supplier_id)
+            try:
+                external = cls._find_existing_order(reference)
+                result["external_matches"].append(
+                    {
+                        "supplier_id": supplier_id,
+                        "reference_id": reference,
+                        "found": bool(external),
+                        "shiprocket_order_id": (
+                            external.get("order_id") if external else None
+                        ),
+                        "shiprocket_shipment_id": (
+                            external.get("shipment_id") if external else None
+                        ),
+                        "awb_code": external.get("awb") if external else None,
+                        "status": external.get("status") if external else None,
+                    }
+                )
+            except ShiprocketError as exc:
+                result["external_matches"].append(
+                    {
+                        "supplier_id": supplier_id,
+                        "reference_id": reference,
+                        "found": False,
+                        "error_code": exc.code,
+                        "status_code": exc.status_code,
+                        "error": str(exc),
+                    }
+                )
+        return result
 
     @classmethod
     def retry_order(cls, order_id):
@@ -1220,6 +1485,11 @@ class ShiprocketService:
             "tracking_reference": shipment.awb_code,
         }
         if include_supplier:
+            data["reference_id"] = shipment.shiprocket_reference_id
+            data["shiprocket_order_id"] = shipment.shiprocket_order_id
+            data["shiprocket_shipment_id"] = shipment.shiprocket_shipment_id
+            data["pickup_location_id"] = shipment.pickup_location_id
+            data["pickup_location"] = shipment.pickup_location
             supplier = shipment.supplier
             verification = supplier.seller_verification if supplier else None
             data["supplier"] = {

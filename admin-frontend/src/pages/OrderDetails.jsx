@@ -8,7 +8,11 @@ import {
   FaUser,
 } from "react-icons/fa";
 
-import { getAdminOrder, retryAdminShipment } from "../services/orderService";
+import {
+  getAdminOrder,
+  getShiprocketDiagnostics,
+  retryAdminShipment,
+} from "../services/orderService";
 
 export default function OrderDetails() {
   const { orderId } = useParams();
@@ -19,6 +23,7 @@ export default function OrderDetails() {
 
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const [shiprocketDiagnostics, setShiprocketDiagnostics] = useState(null);
 
   useEffect(() => {
     async function loadOrder() {
@@ -58,6 +63,19 @@ export default function OrderDetails() {
         <div className="admin-error">{error || "Order not found."}</div>
       </div>
     );
+  }
+
+  async function checkShiprocket() {
+    try {
+      setShiprocketDiagnostics(await getShiprocketDiagnostics(orderId));
+    } catch (err) {
+      setShiprocketDiagnostics({
+        configured: false,
+        error:
+          err?.response?.data?.message ||
+          "Unable to check Shiprocket configuration.",
+      });
+    }
   }
 
   async function retryShipments() {
@@ -194,16 +212,70 @@ export default function OrderDetails() {
         </section>
       </div>
 
+      {shiprocketDiagnostics && (
+        <section className="admin-detail-card admin-items-card">
+          <div className="admin-detail-title">
+            <FaBoxOpen />
+            <h2>Shiprocket Diagnostics</h2>
+          </div>
+          <div className="admin-empty" style={{ textAlign: "left" }}>
+            <strong>
+              {shiprocketDiagnostics.error ||
+                (shiprocketDiagnostics.authentication?.ok
+                  ? "Shiprocket authentication is working."
+                  : "Shiprocket configuration needs attention.")}
+            </strong>
+            <div>
+              Authentication:{" "}
+              {shiprocketDiagnostics.authentication?.ok ? "OK" : "FAILED"}
+            </div>
+            <div>
+              Orders API:{" "}
+              {shiprocketDiagnostics.orders_api?.ok ? "OK" : "FAILED"}
+            </div>
+            <div>
+              Pickup API:{" "}
+              {shiprocketDiagnostics.pickup_api?.ok
+                ? `OK (${shiprocketDiagnostics.pickup_api.count} locations)`
+                : "FAILED"}
+            </div>
+            {shiprocketDiagnostics.order?.ok && (
+              <div>
+                Local Clipcart shipments:{" "}
+                {shiprocketDiagnostics.order.local_shipments?.length || 0}
+              </div>
+            )}
+            {shiprocketDiagnostics.external_matches?.length > 0 && (
+              <div>
+                External order lookup:{" "}
+                {shiprocketDiagnostics.external_matches.some(
+                  (item) => item.found,
+                )
+                  ? "FOUND"
+                  : "NOT FOUND"}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       <section className="admin-detail-card admin-items-card">
         <div className="admin-detail-title">
           <FaBoxOpen />
           <h2>Courier Shipments</h2>
           <button
             type="button"
+            className="admin-secondary-btn"
+            onClick={checkShiprocket}
+            style={{ marginLeft: "auto" }}
+          >
+            Check Shiprocket
+          </button>
+          <button
+            type="button"
             className="admin-primary-btn"
             onClick={retryShipments}
             disabled={retrying}
-            style={{ marginLeft: "auto" }}
           >
             {retrying ? "Retrying…" : "Retry failed shipments"}
           </button>
@@ -217,6 +289,8 @@ export default function OrderDetails() {
                   <th>Status</th>
                   <th>Courier</th>
                   <th>AWB</th>
+                  <th>Reference</th>
+                  <th>Failure</th>
                   <th>Last sync</th>
                 </tr>
               </thead>
@@ -228,22 +302,15 @@ export default function OrderDetails() {
                         shipment.supplier?.name ||
                         "—"}
                     </td>
-                    <td>
-                      <div>{shipment.status || "—"}</div>
-                      {shipment.failure?.message ? (
-                        <small
-                          style={{
-                            display: "block",
-                            marginTop: "0.25rem",
-                            opacity: 0.8,
-                          }}
-                        >
-                          {shipment.failure.message}
-                        </small>
-                      ) : null}
-                    </td>
+                    <td>{shipment.status || "—"}</td>
                     <td>{shipment.courier_name || "Awaiting assignment"}</td>
                     <td>{shipment.awb_code || "Awaiting assignment"}</td>
+                    <td>
+                      {shipment.reference_id ||
+                        shipment.shiprocket_reference_id ||
+                        "—"}
+                    </td>
+                    <td>{shipment.failure_message || "—"}</td>
                     <td>
                       {shipment.last_synced_at
                         ? new Date(shipment.last_synced_at).toLocaleString(

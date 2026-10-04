@@ -69,7 +69,7 @@ class ShiprocketResponseContractTests(unittest.TestCase):
             "data": [
                 {
                     "id": 16161616,
-                    "channel_order_id": "CC-120-4",
+                    "channel_order_id": "1200000000004",
                     "status": "NEW",
                     "shipments": [
                         {
@@ -83,10 +83,54 @@ class ShiprocketResponseContractTests(unittest.TestCase):
         },
     )
     def test_external_order_reconciliation_uses_clipcart_reference(self, request):
-        result = ShiprocketService._find_existing_order("CC-120-4")
+        result = ShiprocketService._find_existing_order("1200000000004")
         self.assertEqual(result["order_id"], 16161616)
         self.assertEqual(result["shipment_id"], 15151515)
         self.assertEqual(result["awb"], "1091208940593")
+
+    @patch.object(
+        ShiprocketService,
+        "_request",
+        return_value={
+            "data": {
+                "shipping_address": [
+                    {
+                        "id": 1856901,
+                        "pickup_location": "Casa Moderna",
+                        "address": "1900 GF, Sector 45",
+                        "city": "Ahmedabad",
+                        "state": "Gujarat",
+                        "pin_code": "380001",
+                    }
+                ]
+            }
+        },
+    )
+    @patch.object(
+        ShiprocketService,
+        "_supplier_address",
+        return_value={
+            "business_name": "Casa Moderna",
+            "name": "Owner",
+            "email": "owner@example.com",
+            "phone": "9876543210",
+            "address": "1900 GF, Sector 45",
+            "address_2": "",
+            "city": "Ahmedabad",
+            "state": "Gujarat",
+            "pin_code": "380001",
+            "country": "India",
+        },
+    )
+    def test_pickup_list_nested_under_data_shipping_address(
+        self, supplier_address, request
+    ):
+        result = ShiprocketService._get_or_create_pickup(10)
+        self.assertEqual(result["id"], "1856901")
+        self.assertEqual(result["name"], "Casa Moderna")
+
+    def test_numeric_supplier_reference(self):
+        self.assertEqual(ShiprocketService._supplier_key(10, 15), "100000000015")
 
 
 if __name__ == "__main__":

@@ -26,3 +26,10 @@ export async function retryAdminShipment(orderId) {
   const response = await adminApi.post(`/admin/shipments/${orderId}/retry`);
   return response.data.data ?? [];
 }
+
+export async function getShiprocketDiagnostics(orderId) {
+  const response = await adminApi.get("/admin/shiprocket/diagnostics", {
+    params: orderId ? { order_id: orderId } : undefined,
+  });
+  return response.data.data;
+}

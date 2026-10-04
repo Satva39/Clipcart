@@ -1,8 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
-from uuid import uuid4
 
 from flask import current_app
+from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
@@ -44,13 +44,14 @@ class CheckoutService:
             return ShiprocketService.ensure_order_shipments(order.id)
         except Exception as exc:
             # Shiprocket is downstream of the already-verified Clipcart order.
-            # Never turn a courier outage into a payment/refund failure, but make
-            # the integration failure visible in server logs for recovery.
+            # Never turn a courier outage into a payment/refund failure, but do
+            # record the failure so an admin/logistics retry can recover it.
             current_app.logger.exception(
-                "Shiprocket provisioning failed for Clipcart order %s: %s",
+                "Shiprocket provisioning raised unexpectedly after Clipcart order=%s was committed: %s",
                 order.id,
                 str(exc)[:500],
             )
+            db.session.rollback()
             return []
 
     @staticmethod
@@ -720,6 +721,10 @@ class CheckoutService:
             session.razorpay_payment_id = razorpay_payment_id
             session.payment_status = "PAID"
             order = CheckoutService._finalize_paid_session(session)
+            current_app.logger.info(
+                "Verified payment finalized Clipcart order=%s; starting Shiprocket provisioning.",
+                order.id,
+            )
             CheckoutService._provision_shiprocket(order)
             return {"order_id": order.id, "payment_status": "COMPLETED"}
 
@@ -774,6 +779,10 @@ class CheckoutService:
         session.payment_error = None
         try:
             order = CheckoutService._finalize_paid_session(session)
+            current_app.logger.info(
+                "Verified payment finalized Clipcart order=%s; starting Shiprocket provisioning.",
+                order.id,
+            )
             CheckoutService._provision_shiprocket(order)
             return {"order_id": order.id, "payment_status": "COMPLETED"}
         except Exception as exc:

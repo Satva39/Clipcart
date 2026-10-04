@@ -1,6 +1,5 @@
 from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity
-from sqlalchemy.orm import selectinload
 
 from app.core.decorators import active_supplier_required
 from app.extensions import db
@@ -8,6 +7,7 @@ from app.modules.inventory.models import InventoryLog
 from app.modules.products.models import Product
 from app.utils.response import success_response, error_response
 from .models import ProductVariant
+from sqlalchemy.orm import selectinload
 
 product_variants_bp = Blueprint(
     "product_variants", __name__, url_prefix="/api/product-variants"
