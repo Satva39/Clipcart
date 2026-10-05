@@ -129,6 +129,14 @@ class ShiprocketResponseContractTests(unittest.TestCase):
         self.assertEqual(result["id"], "1856901")
         self.assertEqual(result["name"], "Casa Moderna")
 
+    def test_customer_name_parts_support_first_and_last_names(self):
+        self.assertEqual(
+            ShiprocketService._customer_name_parts("Rahul Kumar Sharma"),
+            ("Rahul", "Kumar Sharma"),
+        )
+        self.assertEqual(ShiprocketService._customer_name_parts("Rahul"), ("Rahul", ""))
+        self.assertEqual(ShiprocketService._customer_name_parts(""), ("Customer", ""))
+
     def test_numeric_supplier_reference(self):
         self.assertEqual(ShiprocketService._supplier_key(10, 15), "100000000015")
 

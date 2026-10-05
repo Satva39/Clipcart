@@ -194,9 +194,7 @@ class ShiprocketService:
             details = body.get("errors") or body.get("error_details")
             if details:
                 try:
-                    detail_text = json.dumps(
-                        details, ensure_ascii=False, sort_keys=True
-                    )
+                    detail_text = json.dumps(details, ensure_ascii=False, sort_keys=True)
                 except TypeError:
                     detail_text = str(details)
                 message = f"{message}: {detail_text}"
@@ -279,6 +277,25 @@ class ShiprocketService:
             if key in payload and payload[key] not in (None, ""):
                 return payload[key]
         return None
+
+    @staticmethod
+    def _customer_name_parts(value):
+        """Split Clipcart's single full-name field for Shiprocket's name fields.
+
+        Shiprocket documents billing_customer_name as the first name and
+        billing_last_name as the last name. Clipcart stores one full name, so
+        use the first token as the first name and the remaining tokens as the
+        last name. A single-name customer keeps an empty last-name value while
+        still sending the required key because the live API validator requires
+        the field to be present.
+        """
+        name = " ".join(str(value or "").split()).strip()
+        if not name:
+            return "Customer", ""
+        parts = name.split(" ", 1)
+        first = parts[0].strip()[:100] or "Customer"
+        last = parts[1].strip()[:100] if len(parts) > 1 else ""
+        return first, last
 
     @staticmethod
     def _supplier_address(supplier_id):
@@ -379,17 +396,11 @@ class ShiprocketService:
         if isinstance(locations, dict):
             data = locations.get("data")
             if isinstance(data, dict):
-                rows = (
-                    data.get("shipping_address") or data.get("pickup_locations") or []
-                )
+                rows = data.get("shipping_address") or data.get("pickup_locations") or []
             elif isinstance(data, list):
                 rows = data
             else:
-                rows = (
-                    locations.get("shipping_address")
-                    or locations.get("pickup_locations")
-                    or []
-                )
+                rows = locations.get("shipping_address") or locations.get("pickup_locations") or []
         elif isinstance(locations, list):
             rows = locations
 
@@ -430,9 +441,19 @@ class ShiprocketService:
         response = cls._request(
             "POST", "/settings/company/addpickup", json_body=payload
         )
+        nested = response.get("data") if isinstance(response, dict) else None
+        nested = nested if isinstance(nested, dict) else {}
         return {
-            "id": str(cls._pick(response, "pickup_id", "id") or ""),
-            "name": location_name,
+            "id": str(
+                cls._pick(response, "pickup_id", "id")
+                or cls._pick(nested, "pickup_id", "id")
+                or ""
+            ),
+            "name": str(
+                cls._pick(response, "pickup_location", "name")
+                or cls._pick(nested, "pickup_location", "name")
+                or location_name
+            ).strip(),
         }
 
     @classmethod
@@ -514,6 +535,29 @@ class ShiprocketService:
             for p in [order.delivery_address_line_2, order.delivery_landmark]
             if p and p.strip()
         )
+        customer_first_name, customer_last_name = cls._customer_name_parts(
+            order.delivery_full_name or order.customer_name
+        )
+        customer_address = (order.delivery_address_line_1 or "").strip()
+        customer_city = (order.delivery_city or "").strip()
+        customer_state = (order.delivery_state or "").strip()
+        customer_country = (order.delivery_country or "India").strip()
+        customer_email = (order.customer_email or "").strip()
+        if len(customer_address) < 3:
+            raise ShiprocketError(
+                "Customer delivery address is too short for Shiprocket.",
+                code="CUSTOMER_ADDRESS_INVALID",
+            )
+        if not customer_city or not customer_state or not customer_country:
+            raise ShiprocketError(
+                "Customer delivery city, state and country are required.",
+                code="CUSTOMER_ADDRESS_INCOMPLETE",
+            )
+        if not customer_email:
+            raise ShiprocketError(
+                "Customer email is required for Shiprocket.",
+                code="CUSTOMER_EMAIL_MISSING",
+            )
         order_items = []
         supplier_subtotal = Decimal("0")
         for item in items:
@@ -571,28 +615,27 @@ class ShiprocketService:
                 "%Y-%m-%d %H:%M"
             ),
             "pickup_location": pickup_name,
-            "billing_customer_name": (
-                order.delivery_full_name or order.customer_name or "Customer"
-            ).strip()[:100],
-            "billing_address": (order.delivery_address_line_1 or "").strip()[:255],
+            "billing_customer_name": customer_first_name,
+            "billing_last_name": customer_last_name,
+            "billing_address": customer_address[:255],
             "billing_address_2": address_2[:255],
-            "billing_city": (order.delivery_city or "").strip(),
+            "billing_isd_code": "+91",
+            "billing_city": customer_city,
             "billing_pincode": pincode,
-            "billing_state": (order.delivery_state or "").strip(),
-            "billing_country": (order.delivery_country or "India").strip(),
-            "billing_email": (order.customer_email or "").strip(),
+            "billing_state": customer_state,
+            "billing_country": customer_country,
+            "billing_email": customer_email,
             "billing_phone": int(phone_digits),
             "shipping_is_billing": True,
-            "shipping_customer_name": (
-                order.delivery_full_name or order.customer_name or "Customer"
-            ).strip()[:100],
-            "shipping_address": (order.delivery_address_line_1 or "").strip()[:255],
+            "shipping_customer_name": customer_first_name,
+            "shipping_last_name": customer_last_name,
+            "shipping_address": customer_address[:255],
             "shipping_address_2": address_2[:255],
-            "shipping_city": (order.delivery_city or "").strip(),
+            "shipping_city": customer_city,
             "shipping_pincode": pincode,
-            "shipping_state": (order.delivery_state or "").strip(),
-            "shipping_country": (order.delivery_country or "India").strip(),
-            "shipping_email": (order.customer_email or "").strip(),
+            "shipping_state": customer_state,
+            "shipping_country": customer_country,
+            "shipping_email": customer_email,
             "shipping_phone": int(phone_digits),
             "order_items": order_items,
             "payment_method": "Prepaid",
@@ -608,9 +651,6 @@ class ShiprocketService:
             "breadth": package["breadth"],
             "height": package["height"],
             "weight": package["weight"],
-            "shipping_method": current_app.config.get(
-                "SHIPROCKET_SHIPPING_METHOD", "SR"
-            ),
         }
 
     @staticmethod
@@ -1214,12 +1254,7 @@ class ShiprocketService:
             "Shiprocket ensure_order_shipments finished: order=%s shipments=%s",
             order.id,
             [
-                {
-                    "supplier_id": row.supplier_id,
-                    "status": row.status,
-                    "awb": row.awb_code,
-                    "failure_code": row.failure_code,
-                }
+                {"supplier_id": row.supplier_id, "status": row.status, "awb": row.awb_code, "failure_code": row.failure_code}
                 for row in result
             ],
         )
@@ -1266,9 +1301,7 @@ class ShiprocketService:
             "external_matches": [],
         }
         if not result["configured"]:
-            result["error"] = (
-                "Shiprocket credentials/base URL are not configured on the backend."
-            )
+            result["error"] = "Shiprocket credentials/base URL are not configured on the backend."
             return result
 
         try:
@@ -1309,19 +1342,11 @@ class ShiprocketService:
             if isinstance(payload, dict):
                 data = payload.get("data")
                 if isinstance(data, dict):
-                    rows = (
-                        data.get("shipping_address")
-                        or data.get("pickup_locations")
-                        or []
-                    )
+                    rows = data.get("shipping_address") or data.get("pickup_locations") or []
                 elif isinstance(data, list):
                     rows = data
                 else:
-                    rows = (
-                        payload.get("shipping_address")
-                        or payload.get("pickup_locations")
-                        or []
-                    )
+                    rows = payload.get("shipping_address") or payload.get("pickup_locations") or []
             elif isinstance(payload, list):
                 rows = payload
             result["pickup_api"] = {
@@ -1344,9 +1369,7 @@ class ShiprocketService:
             result["order"] = {"ok": False, "message": "Clipcart order not found."}
             return result
 
-        shipments = (
-            Shipment.query.filter_by(order_id=order.id).order_by(Shipment.id).all()
-        )
+        shipments = Shipment.query.filter_by(order_id=order.id).order_by(Shipment.id).all()
         result["order"] = {
             "ok": True,
             "order_id": order.id,
@@ -1386,12 +1409,8 @@ class ShiprocketService:
                         "supplier_id": supplier_id,
                         "reference_id": reference,
                         "found": bool(external),
-                        "shiprocket_order_id": (
-                            external.get("order_id") if external else None
-                        ),
-                        "shiprocket_shipment_id": (
-                            external.get("shipment_id") if external else None
-                        ),
+                        "shiprocket_order_id": external.get("order_id") if external else None,
+                        "shiprocket_shipment_id": external.get("shipment_id") if external else None,
                         "awb_code": external.get("awb") if external else None,
                         "status": external.get("status") if external else None,
                     }
