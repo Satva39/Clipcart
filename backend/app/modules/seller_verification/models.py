@@ -47,6 +47,8 @@ class SellerVerification(BaseModel):
     return_state = db.Column(db.String(100), nullable=True)
     return_postal_code = db.Column(db.String(20), nullable=True)
     return_country = db.Column(db.String(100), nullable=False, default="India")
+    return_latitude = db.Column(db.Numeric(10, 7), nullable=True)
+    return_longitude = db.Column(db.Numeric(10, 7), nullable=True)
 
     account = db.relationship(
         "Account",

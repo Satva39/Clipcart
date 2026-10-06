@@ -58,6 +58,9 @@ class CustomerAddress(BaseModel):
         nullable=False,
     )
 
+    latitude = db.Column(db.Numeric(10, 7), nullable=True)
+    longitude = db.Column(db.Numeric(10, 7), nullable=True)
+
     is_default = db.Column(
         db.Boolean,
         default=False,

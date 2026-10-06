@@ -3104,6 +3104,39 @@ a:focus-visible {
     gap: 4px;
 }
 
+.cc-order-card-shipment {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-top: 13px;
+    padding: 10px 12px;
+    border: 1px solid #e4e8ee;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #556274;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.cc-order-card-shipment span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.cc-order-card-shipment span:first-child {
+    color: #253447;
+    font-weight: 850;
+}
+
+.cc-order-card-shipment svg {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+}
+
 .cc-order-card-top span:not(.cc-order-status),
 .cc-order-card-bottom span {
     color: #7b8594;

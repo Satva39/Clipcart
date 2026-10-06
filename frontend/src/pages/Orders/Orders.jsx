@@ -15,6 +15,31 @@ function statusClass(status) {
   return `cc-order-status ${String(status || "").toLowerCase()}`;
 }
 
+function primaryShipment(order) {
+  const shipments = Array.isArray(order?.shipments) ? order.shipments : [];
+  return (
+    shipments.find(
+      (shipment) =>
+        shipment?.awb_code ||
+        shipment?.shiprocket_shipment_id ||
+        shipment?.tracking_available,
+    ) ||
+    shipments[0] ||
+    null
+  );
+}
+
+function formatShipmentStatus(status) {
+  return String(status || "Awaiting shipment").replaceAll("_", " ");
+}
+
+function formatEta(value) {
+  if (!value) return "ETA not available yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "ETA not available yet";
+  return `Estimated delivery: ${formatDate(date)}`;
+}
+
 function OrdersGrid({ orders }) {
   return (
     <div className="cc-order-list">
@@ -33,6 +58,28 @@ function OrdersGrid({ orders }) {
               {order.status.replaceAll("_", " ")}
             </span>
           </div>
+          {(() => {
+            const shipment = primaryShipment(order);
+            if (!shipment) return null;
+            return (
+              <div
+                className="cc-order-card-shipment"
+                aria-label="Shipment summary"
+              >
+                <span>
+                  <FiTruck />
+                  {formatShipmentStatus(shipment.status)}
+                </span>
+                {shipment.courier_name ? (
+                  <span>{shipment.courier_name}</span>
+                ) : null}
+                {shipment.awb_code ? (
+                  <span>AWB: {shipment.awb_code}</span>
+                ) : null}
+                <span>{formatEta(shipment.estimated_delivery_at)}</span>
+              </div>
+            );
+          })()}
           {order.items?.length ? (
             <div className="cc-order-card-products">
               {order.items.slice(0, 3).map((item) => (

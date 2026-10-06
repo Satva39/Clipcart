@@ -13,6 +13,7 @@ import {
   cancelOrder,
   downloadInvoice,
   getOrderDetails,
+  getOrderTracking,
 } from "../../services/orderService";
 import { createReturn } from "../../services/returnsService";
 import Container from "../../components/common/Container";
@@ -77,9 +78,16 @@ export default function OrderDetails() {
   const [returningItem, setReturningItem] = useState(null);
   const [returnReason, setReturnReason] = useState("");
   const [message, setMessage] = useState("");
+  const [trackingRefresh, setTrackingRefresh] = useState(false);
   const query = useQuery({
     queryKey: ["orders", orderId],
     queryFn: () => getOrderDetails(orderId),
+  });
+  const trackingQuery = useQuery({
+    queryKey: ["orders", orderId, "tracking"],
+    queryFn: () => getOrderTracking(orderId),
+    enabled: Boolean(orderId),
+    staleTime: 60 * 1000,
   });
 
   const cancelMutation = useMutation({
@@ -144,7 +152,9 @@ export default function OrderDetails() {
     );
 
   const order = query.data;
-  const shipments = Array.isArray(order.shipments) ? order.shipments : [];
+  const shipments = Array.isArray((trackingQuery.data || order).shipments)
+    ? (trackingQuery.data || order).shipments
+    : [];
   const canCancel = ["PAID", "PROCESSING"].includes(order.status);
   const canReturn = order.status === "DELIVERED";
 
@@ -493,8 +503,36 @@ export default function OrderDetails() {
           <div className="cc-card-head">
             <div>
               <h2>Courier shipments</h2>
-              <p>Live Shiprocket shipment state synchronized by Clipcart.</p>
+              <p>Forward-delivery tracking is sourced from Shiprocket.</p>
             </div>
+            {shipments.length ? (
+              <button
+                type="button"
+                className="cc-btn secondary"
+                disabled={trackingQuery.isFetching || trackingRefresh}
+                onClick={async () => {
+                  setTrackingRefresh(true);
+                  setMessage("");
+                  try {
+                    const data = await getOrderTracking(orderId, true);
+                    client.setQueryData(["orders", orderId, "tracking"], data);
+                  } catch (err) {
+                    setMessage(
+                      getApiMessage(
+                        err,
+                        "Unable to refresh Shiprocket tracking right now.",
+                      ),
+                    );
+                  } finally {
+                    setTrackingRefresh(false);
+                  }
+                }}
+              >
+                {trackingQuery.isFetching || trackingRefresh
+                  ? "Refreshing…"
+                  : "Refresh tracking"}
+              </button>
+            ) : null}
           </div>
           {shipments.length ? (
             <div className="space-y-3">
@@ -518,12 +556,64 @@ export default function OrderDetails() {
                       AWB: {shipment.awb_code || "Awaiting assignment"}
                     </span>
                     <span>
-                      Pickup: {formatDateTime(shipment.pickup_scheduled_at)}
+                      Estimated delivery:{" "}
+                      {shipment.estimated_delivery_at
+                        ? formatDateTime(shipment.estimated_delivery_at)
+                        : "Not available yet"}
                     </span>
                     <span>
                       Last update: {formatDateTime(shipment.last_synced_at)}
                     </span>
                   </div>
+                  {Array.isArray(shipment.tracking_events) &&
+                  shipment.tracking_events.length ? (
+                    <div className="cc-order-timeline">
+                      {shipment.tracking_events
+                        .slice(-8)
+                        .reverse()
+                        .map((event, index) => (
+                          <div
+                            className="cc-timeline-item"
+                            key={`${shipment.id}-${index}`}
+                          >
+                            <span className="cc-timeline-dot">
+                              <FiPackage />
+                            </span>
+                            <div>
+                              <strong>
+                                {event.status ||
+                                  event.activity ||
+                                  event.current_status ||
+                                  "Shipment update"}
+                              </strong>
+                              <p>
+                                {event.location ||
+                                  event.activity ||
+                                  event.details ||
+                                  "Shiprocket tracking update"}
+                              </p>
+                              <small>
+                                {formatDateTime(
+                                  event.date ||
+                                    event.event_date ||
+                                    event.timestamp,
+                                )}
+                              </small>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : null}
+                  {shipment.tracking_url ? (
+                    <a
+                      className="cc-btn secondary"
+                      href={shipment.tracking_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Track on courier
+                    </a>
+                  ) : null}
                   {shipment.delivered_at ? (
                     <small className="text-gray-500">
                       Courier marked delivered{" "}
@@ -545,8 +635,8 @@ export default function OrderDetails() {
             <div>
               <h2>Tracking timeline</h2>
               <p>
-                Timeline is created from recorded backend order and delivery
-                state.
+                This is the Clipcart order history. Courier events above come
+                from Shiprocket.
               </p>
             </div>
           </div>

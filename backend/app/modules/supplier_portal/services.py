@@ -1,3 +1,5 @@
+import re
+
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from sqlalchemy import case, func
@@ -131,6 +133,8 @@ class SupplierPortalService:
                         verification.return_postal_code if verification else None
                     ),
                     "country": verification.return_country if verification else "India",
+                    "latitude": (float(verification.return_latitude) if verification and verification.return_latitude is not None else None),
+                    "longitude": (float(verification.return_longitude) if verification and verification.return_longitude is not None else None),
                 },
             },
             "payout": {
@@ -176,6 +180,54 @@ class SupplierPortalService:
             str(data.get("gst_number", verification.gst_number or "")).strip() or None
         )
         return_address = data.get("return_address") or {}
+        address_fields = {
+            "address_line_1", "address_line_2", "landmark", "city",
+            "state", "postal_code", "country",
+        }
+        warehouse_address_changed = any(field in return_address for field in address_fields) and any(
+            str(return_address.get(field, getattr(verification, {
+                "address_line_1": "return_address_line_1",
+                "address_line_2": "return_address_line_2",
+                "landmark": "return_landmark",
+                "city": "return_city",
+                "state": "return_state",
+                "postal_code": "return_postal_code",
+                "country": "return_country",
+            }[field], "")) or "").strip()
+            != str(getattr(verification, {
+                "address_line_1": "return_address_line_1",
+                "address_line_2": "return_address_line_2",
+                "landmark": "return_landmark",
+                "city": "return_city",
+                "state": "return_state",
+                "postal_code": "return_postal_code",
+                "country": "return_country",
+            }[field], "") or "").strip()
+            for field in address_fields
+        )
+        postal_code = re.sub(r"\s+", "", str(return_address.get("postal_code", verification.return_postal_code or "") or ""))
+        country = str(return_address.get("country", verification.return_country or "India") or "India").strip() or "India"
+        if country.casefold() == "india" and postal_code and not re.fullmatch(r"[1-9]\d{5}", postal_code):
+            raise ValueError("Supplier Indian postal code must be a valid 6-digit pincode.")
+        keep_existing_coordinates = not warehouse_address_changed and not ({"latitude", "longitude"} & return_address.keys())
+        latitude = verification.return_latitude if keep_existing_coordinates else return_address.get("latitude")
+        longitude = verification.return_longitude if keep_existing_coordinates else return_address.get("longitude")
+        if latitude is not None:
+            try:
+                latitude = float(latitude)
+            except (TypeError, ValueError):
+                raise ValueError("Supplier latitude must be a valid number.")
+            if not -90 <= latitude <= 90:
+                raise ValueError("Supplier latitude must be between -90 and 90.")
+        if longitude is not None:
+            try:
+                longitude = float(longitude)
+            except (TypeError, ValueError):
+                raise ValueError("Supplier longitude must be a valid number.")
+            if not -180 <= longitude <= 180:
+                raise ValueError("Supplier longitude must be between -180 and 180.")
+        if (latitude is None) != (longitude is None):
+            raise ValueError("Supplier latitude and longitude must be provided together.")
         verification.return_address_line_1 = (
             str(
                 return_address.get(
@@ -206,18 +258,10 @@ class SupplierPortalService:
             str(return_address.get("state", verification.return_state or "")).strip()
             or None
         )
-        verification.return_postal_code = (
-            str(
-                return_address.get("postal_code", verification.return_postal_code or "")
-            ).strip()
-            or None
-        )
-        verification.return_country = (
-            str(
-                return_address.get("country", verification.return_country or "India")
-            ).strip()
-            or "India"
-        )
+        verification.return_postal_code = postal_code or None
+        verification.return_country = country
+        verification.return_latitude = latitude
+        verification.return_longitude = longitude
         db.session.commit()
         return SupplierPortalService.profile(supplier_id)
 

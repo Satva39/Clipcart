@@ -1,4 +1,5 @@
 import csv
+from flask import current_app
 import io
 
 from datetime import datetime
@@ -18,7 +19,7 @@ from app.modules.supplier_orders.models import DeliveryAssignment
 from app.modules.notifications.enums import NotificationType
 from app.modules.notifications.services import NotificationService
 from app.modules.admin.services import AdminNotificationService
-from app.modules.shiprocket.service import ShiprocketService
+from app.modules.shiprocket.service import ShiprocketError, ShiprocketService
 
 from .enums import OrderStatus
 from .models import Order
@@ -141,7 +142,7 @@ def _serialize_return_delivery(request):
 
 class OrderService:
     @staticmethod
-    def _serialize_order(order, include_events=True, image_map=None):
+    def _serialize_order(order, include_events=True, image_map=None, force_shiprocket_refresh=False):
         invoice = getattr(order, "invoice", None)
         image_map = image_map if image_map is not None else _item_image_map(order.items)
         return {
@@ -197,7 +198,7 @@ class OrderService:
                 if getattr(order, "delivery_assignment", None)
                 else None
             ),
-            "shipments": ShiprocketService.get_customer_shipments(order),
+            "shipments": ShiprocketService.get_customer_shipments(order, force_refresh=force_shiprocket_refresh),
             "items": [
                 {
                     "id": item.id,
@@ -282,12 +283,12 @@ class OrderService:
         )
 
     @staticmethod
-    def get_tracking(account_id, order_id):
+    def get_tracking(account_id, order_id, *, force_refresh=False):
         order = OrderRepository.get_by_id(order_id)
         if not order or order.account_id != account_id:
             return None
         data = OrderService._serialize_order(
-            order, image_map=_item_image_map(order.items)
+            order, image_map=_item_image_map(order.items), force_shiprocket_refresh=force_refresh
         )
         data["tracking"] = data["events"]
         return data
@@ -511,7 +512,7 @@ class OrderService:
             },
             "delivery_expectation": {
                 "label": "Estimated delivery",
-                "window": "3–7 business days",
+                "window": None,
             },
             "payment_status": order.payment.status if order.payment else "UNKNOWN",
             "created_at": order.created_at,
@@ -655,54 +656,68 @@ class OrderService:
             new_status = OrderStatus(str(status).upper())
         except ValueError:
             raise ValueError("Invalid order status.")
-        # Supplier ownership stops at fulfillment handoff. Logistics owns shipment/delivery states.
-        allowed = {
-            OrderStatus.PAID: {OrderStatus.PROCESSING},
-            OrderStatus.PROCESSING: {OrderStatus.PROCESSING},
-        }
-        if new_status == order.status:
-            return order
-        if new_status not in allowed.get(order.status, set()):
+
+        # A supplier can initiate fulfillment while the overall order is PAID or
+        # already PROCESSING. The latter is important for multi-supplier orders: a
+        # second supplier still needs to provision only their own shipment.
+        if order.status not in {OrderStatus.PAID, OrderStatus.PROCESSING} or new_status != OrderStatus.PROCESSING:
             raise ValueError(
                 f"Suppliers cannot change {order.status.value} orders to {new_status.value}."
             )
-        previous = order.status.value
-        order.status = new_status
 
-        # A paid order is created with an assignment during checkout, but older
-        # records may not have one. Ensure the logistics handoff always has a
-        # delivery record available.
-        if new_status == OrderStatus.PROCESSING:
-            assignment = DeliveryAssignment.query.filter_by(order_id=order.id).first()
-            if not assignment:
-                db.session.add(DeliveryAssignment(order_id=order.id))
+        was_already_processing = order.status == OrderStatus.PROCESSING
+        order.status = OrderStatus.PROCESSING
 
-        OrderEventService.add(
-            order,
-            "SUPPLIER_PROCESSING",
-            "Supplier processing",
-            f"Supplier started processing order #{order.id}.",
-        )
-        db.session.commit()
-        NotificationService.create(
-            order.account_id,
-            "Order processing",
-            f"Order #{order.id} is being prepared for shipment.",
-            NotificationType.ORDER,
-            dedupe_key=f"order:{order.id}:customer:supplier-processing",
-        )
+        assignment = DeliveryAssignment.query.filter_by(order_id=order.id).first()
+        if not assignment:
+            db.session.add(DeliveryAssignment(order_id=order.id))
 
-        # Supplier processing is the current fulfillment handoff into logistics.
-        # Notify active logistics managers without exposing supplier analytics.
-        try:
-            NotificationService.notify_logistics(
-                title="New order ready for logistics",
-                message=f"Order #{order.id} is ready for pickup assignment.",
-                dedupe_key_prefix=f"order:{order.id}:logistics:ready",
+        if not was_already_processing:
+            OrderEventService.add(
+                order,
+                "SUPPLIER_PROCESSING",
+                "Supplier processing",
+                f"Supplier started processing order #{order.id}.",
             )
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+        db.session.commit()
+
+        # Shiprocket provisioning starts ONLY because this supplier explicitly
+        # clicked Start Processing. This call is supplier-scoped and idempotent.
+        try:
+            ShiprocketService.ensure_supplier_shipment(
+                order.id, supplier_id, propagate=True
+            )
+        except ShiprocketError as exc:
+            current_app.logger.error(
+                "Shiprocket provisioning failed after supplier Start Processing: order=%s supplier=%s code=%s status=%s message=%s",
+                order.id, supplier_id, exc.code, exc.status_code, str(exc)[:500],
+            )
+            raise
+        except Exception as exc:
+            current_app.logger.exception(
+                "Unexpected Shiprocket provisioning failure after supplier Start Processing: order=%s supplier=%s: %s",
+                order.id, supplier_id, str(exc)[:500],
+            )
+            raise
+
+        order = Order.query.get(order.id)
+        if not was_already_processing:
+            NotificationService.create(
+                order.account_id,
+                "Order processing",
+                f"Order #{order.id} is being prepared for shipment.",
+                NotificationType.ORDER,
+                dedupe_key=f"order:{order.id}:customer:supplier-processing",
+            )
+            try:
+                NotificationService.notify_logistics(
+                    title="New order ready for logistics",
+                    message=f"Order #{order.id} is ready for pickup assignment.",
+                    dedupe_key_prefix=f"order:{order.id}:logistics:ready",
+                )
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
         return order
 
@@ -788,6 +803,16 @@ class OrderService:
             db.session.rollback()
             raise
 
+        for order in changed:
+            try:
+                ShiprocketService.ensure_supplier_shipment(
+                    order.id, supplier_id, propagate=True
+                )
+            except Exception as exc:
+                current_app.logger.exception(
+                    "Shiprocket provisioning failed after supplier CSV processing: order=%s supplier=%s: %s",
+                    order.id, supplier_id, str(exc)[:500],
+                )
         for order in changed:
             NotificationService.create(
                 order.account_id,

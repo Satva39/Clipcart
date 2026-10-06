@@ -48,6 +48,12 @@ class Shipment(BaseModel):
     pickup_scheduled_at = db.Column(db.DateTime, nullable=True)
     awb_assigned_at = db.Column(db.DateTime, nullable=True)
     delivered_at = db.Column(db.DateTime, nullable=True)
+    label_url = db.Column(db.Text, nullable=True)
+    tracking_url = db.Column(db.Text, nullable=True)
+    estimated_delivery_at = db.Column(db.DateTime, nullable=True)
+    tracking_data = db.Column(db.JSON, nullable=True)
+    tracking_events = db.Column(db.JSON, nullable=True)
+    last_tracking_event_at = db.Column(db.DateTime, nullable=True)
 
     order = db.relationship(
         "Order",

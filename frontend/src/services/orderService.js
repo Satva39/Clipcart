@@ -57,8 +57,9 @@ export async function getOrderDetails(orderId) {
   return response.data.data;
 }
 
-export async function getOrderTracking(orderId) {
-  const response = await api.get(`/orders/${orderId}/tracking`);
+export async function getOrderTracking(orderId, forceRefresh = false) {
+  const suffix = forceRefresh ? "?refresh=1" : "";
+  const response = await api.get(`/orders/${orderId}/tracking${suffix}`);
   return response.data.data;
 }
 

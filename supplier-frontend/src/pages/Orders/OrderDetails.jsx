@@ -11,6 +11,8 @@ import {
 import {
   getSupplierOrderDetails,
   updateSupplierOrderStatus,
+  downloadShipmentLabel,
+  regenerateShipmentLabel,
 } from "../../services/orderService";
 import { formatDateTime, money } from "../../utils/dateRange";
 import "../../styles/supplier-pages.css";
@@ -35,6 +37,30 @@ export default function OrderDetails() {
   useEffect(() => {
     load();
   }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function handleLabel(shipment) {
+    setError("");
+    try {
+      let blob;
+      if (shipment.label_available) {
+        blob = await downloadShipmentLabel(shipment.id);
+      } else {
+        const refreshed = await regenerateShipmentLabel(shipment.id);
+        if (!refreshed?.label_available)
+          throw new Error("Shipping label is not ready yet.");
+        blob = await downloadShipmentLabel(shipment.id);
+      }
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      setError(
+        e?.response?.data?.message ||
+          e?.message ||
+          "Unable to open the shipping label.",
+      );
+    }
+  }
+
   async function process() {
     setUpdating(true);
     try {
@@ -61,9 +87,17 @@ export default function OrderDetails() {
         </Link>
       </div>
     );
-  const canProcess = order.status === "PAID";
-  const delivery = order.delivery || {};
   const shipments = Array.isArray(order.shipments) ? order.shipments : [];
+  const supplierShipment = shipments[0];
+  const shipmentComplete = Boolean(
+    supplierShipment?.shiprocket_shipment_id &&
+    supplierShipment?.awb_code &&
+    supplierShipment?.label_available &&
+    supplierShipment?.pickup_scheduled_at,
+  );
+  const canProcess =
+    ["PAID", "PROCESSING"].includes(order.status) && !shipmentComplete;
+  const delivery = order.delivery || {};
   return (
     <div className="page-shell">
       <div className="page-heading">
@@ -92,12 +126,16 @@ export default function OrderDetails() {
         </div>
         {canProcess && (
           <button className="action-link" onClick={process} disabled={updating}>
-            {updating ? "Updating…" : "Start processing"}
+            {updating
+              ? "Processing…"
+              : supplierShipment
+                ? "Continue shipment setup"
+                : "Start processing"}
           </button>
         )}
         <div className="fulfillment-note">
-          Suppliers can move a paid order into processing. Shipment and delivery
-          are controlled by logistics.
+          Start Processing sends this supplier's fulfillment to Shiprocket.
+          Shipment tracking is then synchronized from Shiprocket.
         </div>
       </div>
       <div className="detail-grid">
@@ -180,6 +218,22 @@ export default function OrderDetails() {
                   )}
                   <br />
                   AWB: {shipment.awb_code || "Awaiting assignment"}
+                  <br />
+                  Label:{" "}
+                  {shipment.label_available ? "Ready to print" : "Not ready"}
+                  {shipment.awb_code ? (
+                    <button
+                      type="button"
+                      className="action-link"
+                      onClick={() => handleLabel(shipment)}
+                      style={{ marginTop: "0.45rem" }}
+                    >
+                      <FaPrint />{" "}
+                      {shipment.label_available
+                        ? "Print label"
+                        : "Generate label"}
+                    </button>
+                  ) : null}
                 </span>
                 <span style={{ textAlign: "right" }}>
                   Pickup: {formatDateTime(shipment.pickup_scheduled_at)}
@@ -287,7 +341,8 @@ export default function OrderDetails() {
               Status: <b>{order.status}</b>
               <br />
               Expected:{" "}
-              {order.delivery_expectation?.window || "3–7 business days"}
+              {order.delivery_expectation?.window ||
+                "Shiprocket estimate available after shipment creation"}
             </p>
           </div>
         </div>

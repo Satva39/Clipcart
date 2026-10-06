@@ -4,6 +4,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.modules.accounts.decorators import customer_required
 from app.core.decorators import active_supplier_required
 from app.services.invoice_service import InvoiceService
+from app.modules.shiprocket.service import ShiprocketError
 from app.utils.response import error_response, success_response
 from .models import Order
 from .services import OrderService
@@ -52,7 +53,11 @@ def order_detail(order_id):
 @orders_bp.get("/<int:order_id>/tracking")
 @customer_required
 def tracking(order_id):
-    order = OrderService.get_tracking(int(get_jwt_identity()), order_id)
+    order = OrderService.get_tracking(
+        int(get_jwt_identity()),
+        order_id,
+        force_refresh=request.args.get("refresh", "0") == "1",
+    )
     if not order:
         return error_response(message="Order not found.", status_code=404)
     return success_response(data=order)
@@ -127,6 +132,14 @@ def import_supplier_orders():
         )
     except ValueError as exc:
         return error_response(message=str(exc), status_code=400)
+    except ShiprocketError as exc:
+        return error_response(
+            message=(
+                "Orders were updated, but Shiprocket shipment setup needs attention: "
+                f"{str(exc)}"
+            ),
+            status_code=502,
+        )
     return success_response("CSV imported successfully.", data=result)
 
 
@@ -156,6 +169,14 @@ def update_order_status(order_id):
         )
     except ValueError as exc:
         return error_response(message=str(exc), status_code=400)
+    except ShiprocketError as exc:
+        return error_response(
+            message=(
+                "Order moved to processing, but Shiprocket shipment setup needs attention: "
+                f"{str(exc)}"
+            ),
+            status_code=502,
+        )
 
 
 @orders_bp.get("/supplier/earnings")

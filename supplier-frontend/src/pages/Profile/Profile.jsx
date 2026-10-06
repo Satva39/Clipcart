@@ -32,6 +32,8 @@ export default function Profile() {
       state: "",
       postal_code: "",
       country: "India",
+      latitude: null,
+      longitude: null,
     },
   });
   const [payout, setPayout] = useState({
@@ -66,6 +68,8 @@ export default function Profile() {
           state: p?.business?.return_address?.state || "",
           postal_code: p?.business?.return_address?.postal_code || "",
           country: p?.business?.return_address?.country || "India",
+          latitude: p?.business?.return_address?.latitude ?? null,
+          longitude: p?.business?.return_address?.longitude ?? null,
         },
       });
       if (a)
@@ -85,6 +89,34 @@ export default function Profile() {
   useEffect(() => {
     load();
   }, []);
+  function captureWarehouseLocation() {
+    if (!navigator.geolocation) {
+      setError("This browser does not support location access.");
+      return;
+    }
+    setError("");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm((current) => ({
+          ...current,
+          return_address: {
+            ...current.return_address,
+            latitude: Number(position.coords.latitude.toFixed(7)),
+            longitude: Number(position.coords.longitude.toFixed(7)),
+          },
+        }));
+        setMessage(
+          "Warehouse location captured from this device. Save changes to keep it.",
+        );
+      },
+      () =>
+        setError(
+          "Location permission was unavailable. Enter the warehouse address manually.",
+        ),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
+  }
+
   async function save(e) {
     e.preventDefault();
     setSaving(true);
@@ -270,12 +302,36 @@ export default function Profile() {
                     <FaMapMarkerAlt /> Return / warehouse address
                   </h3>
                   <p className="panel-subtitle">
-                    This is the destination used when logistics returns a
-                    customer item to you.
+                    This is your real warehouse/pickup address for Shiprocket
+                    shipments and the destination for returns.
                   </p>
                 </div>
               </div>
               <div className="form-card">
+                <div className="profile-location-actions">
+                  <button
+                    type="button"
+                    className="action-link"
+                    onClick={captureWarehouseLocation}
+                  >
+                    <FaMapMarkerAlt /> Use current warehouse location
+                  </button>
+                  <span className="form-help">
+                    Use this at the physical pickup address. Captured GPS
+                    coordinates improve delivery/pickup mapping where Shiprocket
+                    supports them.
+                  </span>
+                </div>
+                {form.return_address.latitude != null &&
+                form.return_address.longitude != null ? (
+                  <div className="profile-state">
+                    <span>Captured coordinates</span>
+                    <b>
+                      {form.return_address.latitude},{" "}
+                      {form.return_address.longitude}
+                    </b>
+                  </div>
+                ) : null}
                 <label className="form-label">
                   Address line 1
                   <input

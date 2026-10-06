@@ -36,6 +36,8 @@ class Order(BaseModel):
     delivery_state = db.Column(db.String(100), nullable=False, default="")
     delivery_postal_code = db.Column(db.String(20), nullable=False, default="")
     delivery_country = db.Column(db.String(100), nullable=False, default="India")
+    delivery_latitude = db.Column(db.Numeric(10, 7), nullable=True)
+    delivery_longitude = db.Column(db.Numeric(10, 7), nullable=True)
 
     status = db.Column(
         db.Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False, index=True

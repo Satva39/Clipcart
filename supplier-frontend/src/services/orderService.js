@@ -37,3 +37,20 @@ export async function importSupplierOrders(file) {
   const response = await api.post("/orders/supplier/import", form);
   return response.data;
 }
+
+export async function downloadShipmentLabel(shipmentId) {
+  const response = await api.get(
+    `/integrations/shipments/${shipmentId}/label`,
+    {
+      responseType: "blob",
+    },
+  );
+  return response.data;
+}
+
+export async function regenerateShipmentLabel(shipmentId) {
+  const response = await api.post(
+    `/integrations/shipments/${shipmentId}/label`,
+  );
+  return response.data.data;
+}

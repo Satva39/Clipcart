@@ -30,6 +30,8 @@ const emptyAddress = {
   state: "",
   postal_code: "",
   country: "India",
+  latitude: null,
+  longitude: null,
   is_default: false,
 };
 
@@ -66,6 +68,28 @@ export default function ProfilePage() {
       active = false;
     };
   }, []);
+
+  function captureAddressLocation() {
+    if (!navigator.geolocation) {
+      setPageError("This browser does not support location access.");
+      return;
+    }
+    setPageError("");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setAddressForm((current) => ({
+          ...current,
+          latitude: Number(position.coords.latitude.toFixed(7)),
+          longitude: Number(position.coords.longitude.toFixed(7)),
+        }));
+      },
+      () =>
+        setPageError(
+          "Location permission was unavailable. Enter the address manually.",
+        ),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
+  }
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -356,6 +380,22 @@ export default function ProfilePage() {
               </button>
             </div>
             <form className="cc-form compact" onSubmit={saveAddress}>
+              <div className="cc-inline-actions">
+                <button
+                  type="button"
+                  className="cc-btn secondary"
+                  onClick={captureAddressLocation}
+                >
+                  <FiMapPin /> Use current location
+                </button>
+                {addressForm.latitude != null &&
+                addressForm.longitude != null ? (
+                  <small>
+                    Location saved: {addressForm.latitude},{" "}
+                    {addressForm.longitude}
+                  </small>
+                ) : null}
+              </div>
               <div className="cc-two-col">
                 <label>
                   Full name

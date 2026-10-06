@@ -1,6 +1,10 @@
-from flask import Blueprint, current_app, request
+from flask import Blueprint, current_app, request, send_file
+import io
+import requests
+from flask_jwt_extended import get_jwt_identity
 
 from app.modules.accounts.decorators import active_logistics_required
+from app.core.decorators import active_supplier_required
 from app.modules.admin.authorization import admin_authorized
 from app.modules.orders.models import Order
 from app.shared.utils.api_response import error, success
@@ -64,6 +68,46 @@ def admin_retry_shipments(order_id):
         ],
     )
 
+
+@shiprocket_bp.get("/integrations/shipments/<int:shipment_id>/label")
+@active_supplier_required
+def supplier_label(shipment_id):
+    from .models import Shipment
+    shipment = Shipment.query.get(shipment_id)
+    if not shipment:
+        return error("Shipment not found.", 404)
+    account_id = int(get_jwt_identity())
+    if shipment.supplier_id != account_id:
+        return error("Shipment not found.", 404)
+    if not shipment.label_url:
+        return error("Shipping label is not ready yet.", 404)
+    try:
+        response = requests.get(shipment.label_url, timeout=30)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        return error("Shipping label could not be downloaded right now.", 502)
+    return send_file(
+        io.BytesIO(response.content),
+        mimetype=response.headers.get("Content-Type", "application/pdf"),
+        as_attachment=False,
+        download_name=f"clipcart-order-{shipment.order_id}-label.pdf",
+    )
+
+@shiprocket_bp.post("/integrations/shipments/<int:shipment_id>/label")
+@active_supplier_required
+def regenerate_label(shipment_id):
+    from .models import Shipment
+    shipment = Shipment.query.get(shipment_id)
+    if not shipment:
+        return error("Shipment not found.", 404)
+    account_id = int(get_jwt_identity())
+    if shipment.supplier_id != account_id:
+        return error("Shipment not found.", 404)
+    try:
+        ShiprocketService._generate_label(shipment)
+    except ShiprocketError as exc:
+        return error(str(exc), 400)
+    return success("Shipping label is ready.", ShiprocketService._serialize_shipment(shipment))
 
 @shiprocket_bp.get("/admin/shiprocket/diagnostics")
 @admin_authorized

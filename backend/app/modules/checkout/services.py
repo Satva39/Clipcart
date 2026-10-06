@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import datetime
 from decimal import Decimal
 
 from flask import current_app
@@ -25,7 +25,6 @@ from app.modules.payments.models import Payment
 from app.modules.products.models import Product
 from app.modules.product_variants.models import ProductVariant
 from app.modules.supplier_orders.models import DeliveryAssignment
-from app.modules.shiprocket.service import ShiprocketService
 from app.modules.stock_alerts.services import StockAlertService
 from app.services.invoice_service import InvoiceService
 from app.services.razorpay_service import RazorpayService
@@ -38,22 +37,6 @@ from .repository import CheckoutRepository
 
 
 class CheckoutService:
-    @staticmethod
-    def _provision_shiprocket(order):
-        try:
-            return ShiprocketService.ensure_order_shipments(order.id)
-        except Exception as exc:
-            # Shiprocket is downstream of the already-verified Clipcart order.
-            # Never turn a courier outage into a payment/refund failure, but do
-            # record the failure so an admin/logistics retry can recover it.
-            current_app.logger.exception(
-                "Shiprocket provisioning raised unexpectedly after Clipcart order=%s was committed: %s",
-                order.id,
-                str(exc)[:500],
-            )
-            db.session.rollback()
-            return []
-
     @staticmethod
     def create_or_get(account_id):
         session = CheckoutRepository.get_active_by_account(account_id)
@@ -241,12 +224,13 @@ class CheckoutService:
             session.total = total
             db.session.flush()
 
-        today = date.today()
+        # Delivery estimates are owned by Shiprocket after a shipment exists.
+        # Before supplier processing there is intentionally no courier ETA to report.
         estimate = {
             "label": "Estimated delivery",
-            "window": "3–7 business days",
-            "from": today + timedelta(days=3),
-            "to": today + timedelta(days=7),
+            "window": None,
+            "from": None,
+            "to": None,
         }
         return {
             "checkout_session_id": session.id,
@@ -522,6 +506,8 @@ class CheckoutService:
             delivery_state=address.state,
             delivery_postal_code=address.postal_code,
             delivery_country=address.country,
+            delivery_latitude=address.latitude,
+            delivery_longitude=address.longitude,
             status=OrderStatus.PAID,
         )
         db.session.add(order)
@@ -609,9 +595,9 @@ class CheckoutService:
         )
         OrderEventService.add(
             order,
-            "SUPPLIER_PROCESSING",
-            "Supplier processing",
-            "The order has been sent to the supplier for processing.",
+            "AWAITING_SUPPLIER_PROCESSING",
+            "Awaiting supplier processing",
+            "The paid order is waiting for the supplier to start processing.",
         )
 
         assignment = DeliveryAssignment.query.filter_by(order_id=order.id).first()
@@ -722,10 +708,9 @@ class CheckoutService:
             session.payment_status = "PAID"
             order = CheckoutService._finalize_paid_session(session)
             current_app.logger.info(
-                "Verified payment finalized Clipcart order=%s; starting Shiprocket provisioning.",
+                "Verified payment finalized Clipcart order=%s; waiting for supplier Start Processing before Shiprocket provisioning.",
                 order.id,
             )
-            CheckoutService._provision_shiprocket(order)
             return {"order_id": order.id, "payment_status": "COMPLETED"}
 
         try:
@@ -780,10 +765,9 @@ class CheckoutService:
         try:
             order = CheckoutService._finalize_paid_session(session)
             current_app.logger.info(
-                "Verified payment finalized Clipcart order=%s; starting Shiprocket provisioning.",
+                "Verified payment finalized Clipcart order=%s; waiting for supplier Start Processing before Shiprocket provisioning.",
                 order.id,
             )
-            CheckoutService._provision_shiprocket(order)
             return {"order_id": order.id, "payment_status": "COMPLETED"}
         except Exception as exc:
             captured_amount = Decimal(actual_paise) / Decimal("100")
@@ -914,6 +898,4 @@ class CheckoutService:
             return Order.query.get(session.order_id)
         if session.payment_status != "PAID":
             raise ValueError("Payment not completed.")
-        order = CheckoutService._finalize_paid_session(session)
-        CheckoutService._provision_shiprocket(order)
-        return order
+        return CheckoutService._finalize_paid_session(session)

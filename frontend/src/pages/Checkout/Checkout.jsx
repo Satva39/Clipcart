@@ -33,6 +33,8 @@ const emptyForm = {
   state: "",
   postal_code: "",
   country: "India",
+  latitude: null,
+  longitude: null,
   is_default: false,
 };
 
@@ -158,6 +160,28 @@ export default function Checkout() {
     setShowForm(true);
   }
 
+  function captureDeliveryLocation() {
+    if (!navigator.geolocation) {
+      setError("This browser does not support location access.");
+      return;
+    }
+    setError("");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm((current) => ({
+          ...current,
+          latitude: Number(position.coords.latitude.toFixed(7)),
+          longitude: Number(position.coords.longitude.toFixed(7)),
+        }));
+      },
+      () =>
+        setError(
+          "Location permission was unavailable. You can still enter the address manually.",
+        ),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
+  }
+
   async function saveAddress(event) {
     event.preventDefault();
     setAddressBusy(true);
@@ -273,9 +297,28 @@ export default function Checkout() {
         },
         handler: async (response) => {
           try {
+            // Payment verification is the authoritative success boundary.
+            // The backend finalizes the order (and clears the persisted cart)
+            // before returning a successful verification response.
             const result = await verifyPayment(response);
-            await clearCart();
-            navigate(`/order-success?order=${result.order_id}`, {
+            const orderId = Number(result?.order_id);
+
+            if (!Number.isInteger(orderId) || orderId <= 0) {
+              throw new Error(
+                "Order was created but no order ID was returned.",
+              );
+            }
+
+            // Cart cleanup is best-effort after a successful payment/order.
+            // It must never turn a completed order into a payment error.
+            try {
+              await clearCart();
+            } catch {
+              // The backend has already finalized the order and removed its
+              // cart items. Navigation must still continue.
+            }
+
+            navigate("/orders", {
               replace: true,
             });
           } catch (err) {
@@ -433,6 +476,18 @@ export default function Checkout() {
                   className="cc-form compact checkout-form"
                   onSubmit={saveAddress}
                 >
+                  <div className="cc-inline-actions">
+                    <button
+                      type="button"
+                      className="cc-btn secondary"
+                      onClick={captureDeliveryLocation}
+                    >
+                      <FiMapPin /> Use current delivery location
+                    </button>
+                    {form.latitude != null && form.longitude != null ? (
+                      <small>Location captured for shipment mapping.</small>
+                    ) : null}
+                  </div>
                   <div className="cc-two-col">
                     {[
                       ["full_name", "Full name", true],
@@ -584,8 +639,17 @@ export default function Checkout() {
             {summary?.estimated_delivery ? (
               <div className="cc-slim-empty">
                 <strong>{summary.estimated_delivery.label}</strong>
-                <br />
-                {summary.estimated_delivery.window}
+                {summary.estimated_delivery.window ? (
+                  <>
+                    <br />
+                    {summary.estimated_delivery.window}
+                  </>
+                ) : (
+                  <>
+                    <br />
+                    Available after supplier processing
+                  </>
+                )}
               </div>
             ) : null}
 

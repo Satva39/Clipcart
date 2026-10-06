@@ -27,6 +27,8 @@ def serialize_address(address):
         "state": address.state,
         "postal_code": address.postal_code,
         "country": address.country,
+        "latitude": float(address.latitude) if address.latitude is not None else None,
+        "longitude": float(address.longitude) if address.longitude is not None else None,
         "is_default": address.is_default,
     }
 
@@ -40,7 +42,10 @@ def create():
     if errors:
         return error_response(message=errors, status_code=400)
 
-    address = CustomerAddressService.create(account_id, data)
+    try:
+        address = CustomerAddressService.create(account_id, data)
+    except ValueError as exc:
+        return error_response(message=str(exc), status_code=400)
     return success_response(
         message="Address created.",
         data=serialize_address(address),

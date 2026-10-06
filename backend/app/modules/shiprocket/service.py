@@ -364,9 +364,9 @@ class ShiprocketService:
                 "Supplier pickup address exceeds Clipcart field limits.",
                 code="SUPPLIER_PICKUP_INVALID",
             )
-        if not values["pin_code"].isdigit():
+        if values["country"].casefold() == "india" and not re.fullmatch(r"[1-9]\d{5}", values["pin_code"]):
             raise ShiprocketError(
-                "Supplier pickup postal code must contain digits only.",
+                "Supplier pickup postal code must be a valid 6-digit Indian pincode.",
                 code="SUPPLIER_PICKUP_INVALID",
             )
         return values
@@ -504,12 +504,19 @@ class ShiprocketService:
 
     @classmethod
     def _build_payload(cls, order, supplier_id, items, pickup_name):
-        if not order.delivery_postal_code.isdigit():
+        postal_code = re.sub(r"\s+", "", str(order.delivery_postal_code or ""))
+        if order.delivery_country and str(order.delivery_country).strip().casefold() == "india" and not re.fullmatch(r"[1-9]\d{5}", postal_code):
             raise ShiprocketError(
-                "Customer delivery postal code must contain digits only.",
+                "Customer delivery postal code must be a valid 6-digit Indian pincode.",
                 code="CUSTOMER_ADDRESS_INVALID",
             )
-        pincode = int(order.delivery_postal_code)
+        try:
+            pincode = int(postal_code)
+        except (TypeError, ValueError):
+            raise ShiprocketError(
+                "Customer delivery postal code is invalid.",
+                code="CUSTOMER_ADDRESS_INVALID",
+            )
         if pincode <= 0:
             raise ShiprocketError(
                 "Customer delivery postal code is invalid.",
@@ -609,7 +616,7 @@ class ShiprocketService:
             "Clipcart supplier shipment allocation: "
             f"marketing fee ₹{marketing_allocation:.2f}, tax ₹{tax_allocation:.2f}."
         )
-        return {
+        payload = {
             "order_id": supplier_key,
             "order_date": (order.created_at or datetime.utcnow()).strftime(
                 "%Y-%m-%d %H:%M"
@@ -652,6 +659,10 @@ class ShiprocketService:
             "height": package["height"],
             "weight": package["weight"],
         }
+        if order.delivery_latitude is not None and order.delivery_longitude is not None:
+            payload["latitude"] = float(order.delivery_latitude)
+            payload["longitude"] = float(order.delivery_longitude)
+        return payload
 
     @staticmethod
     def _supplier_key(order_id, supplier_id):
@@ -756,6 +767,74 @@ class ShiprocketService:
         return True
 
     @classmethod
+    def _check_serviceability(cls, shipment, order, items):
+        """Preflight courier availability for the real supplier/customer pincodes.
+
+        Shiprocket's current courier serviceability API accepts pickup/delivery
+        postcodes plus weight for prepaid/COD determination. This does not claim
+        that a street address is GPS-verified; it only prevents obviously
+        unserviceable postal routes from reaching order creation.
+        """
+        pickup = cls._supplier_address(shipment.supplier_id)
+        package = cls._package_dimensions(items)
+        try:
+            pickup_postcode = int(pickup["pin_code"])
+            delivery_postcode = int(re.sub(r"\s+", "", str(order.delivery_postal_code or "")))
+        except (TypeError, ValueError):
+            raise ShiprocketError(
+                "Both supplier and customer pincodes must be valid before shipment creation.",
+                code="PINCODE_INVALID",
+            )
+        response = cls._request(
+            "GET",
+            "/courier/serviceability/",
+            params={
+                "pickup_postcode": pickup_postcode,
+                "delivery_postcode": delivery_postcode,
+                "cod": 0,
+                "weight": package["weight"],
+            },
+        )
+        rows = []
+        data = response.get("data") if isinstance(response, dict) else None
+        if isinstance(data, dict):
+            rows = data.get("available_courier_companies") or data.get("available_courier") or []
+        elif isinstance(data, list):
+            rows = data
+        if isinstance(rows, list) and not rows:
+            raise ShiprocketError(
+                "Shiprocket reports no serviceable courier for this supplier-to-customer route.",
+                code="NO_SERVICEABLE_COURIER",
+                retryable=False,
+            )
+        current_app.logger.info(
+            "Shiprocket serviceability passed: order=%s supplier=%s pickup_pin=%s delivery_pin=%s couriers=%s",
+            order.id, shipment.supplier_id, pickup_postcode, delivery_postcode, len(rows) if isinstance(rows, list) else 0,
+        )
+        # Serviceability can expose a preliminary ETD before an AWB exists.
+        # Persist it as a provisional Shiprocket estimate; tracking data later
+        # replaces it when a concrete shipment ETA is available.
+        if isinstance(rows, list) and rows and not shipment.estimated_delivery_at:
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                etd = cls._parse_datetime(
+                    cls._pick(
+                        row,
+                        "etd",
+                        "edd",
+                        "estimated_delivery_date",
+                        "estimated_delivery_at",
+                        "expected_delivery_date",
+                    )
+                )
+                if etd:
+                    shipment.estimated_delivery_at = etd
+                    db.session.commit()
+                    break
+        return response
+
+    @classmethod
     def _create_shiprocket_order(cls, shipment, order, supplier_id, items):
         # Recover any pre-existing external order before doing other remote calls.
         # This is important when an earlier create request succeeded remotely but
@@ -775,6 +854,7 @@ class ShiprocketService:
         if cls._apply_reconciled_order(shipment, existing):
             return
 
+        cls._check_serviceability(shipment, order, items)
         payload = cls._build_payload(order, supplier_id, items, pickup["name"])
         try:
             response = cls._request("POST", "/orders/create/adhoc", json_body=payload)
@@ -853,6 +933,56 @@ class ShiprocketService:
         shipment.failure_message = None
         shipment.last_synced_at = datetime.utcnow()
         db.session.commit()
+
+    @classmethod
+    def _generate_label(cls, shipment):
+        if shipment.label_url:
+            return shipment.label_url
+        if not shipment.shiprocket_shipment_id:
+            raise ShiprocketError(
+                "Cannot generate a label before shipment creation.",
+                code="SHIPMENT_ID_MISSING",
+            )
+        if not shipment.awb_code:
+            raise ShiprocketError(
+                "Cannot generate a label before AWB assignment.",
+                code="AWB_REQUIRED_FOR_LABEL",
+            )
+        response = cls._request(
+            "POST",
+            "/courier/generate/label",
+            json_body={"shipment_id": [int(shipment.shiprocket_shipment_id)]},
+        )
+        candidates = []
+        if isinstance(response, dict):
+            candidates.extend([response.get("label_url"), response.get("label")] )
+            data = response.get("data")
+            if isinstance(data, dict):
+                candidates.extend([data.get("label_url"), data.get("label")])
+        label_url = next((str(v).strip() for v in candidates if v), None)
+        if not label_url:
+            raise ShiprocketError(
+                "Shiprocket did not return a shipping label URL.",
+                code="LABEL_NOT_GENERATED",
+                retryable=True,
+            )
+        shipment.label_url = label_url
+        shipment.last_synced_at = datetime.utcnow()
+        shipment.failure_code = None
+        shipment.failure_message = None
+        db.session.commit()
+        NotificationService.create(
+            account_id=shipment.supplier_id,
+            title="Shipping label ready",
+            message=f"The shipping label for order #{shipment.order_id} is ready to print.",
+            notification_type=NotificationType.ORDER,
+            dedupe_key=f"order:{shipment.order_id}:supplier:{shipment.supplier_id}:label-ready",
+        )
+        current_app.logger.info(
+            "Shiprocket label generated: order=%s supplier=%s shipment=%s",
+            shipment.order_id, shipment.supplier_id, shipment.shiprocket_shipment_id,
+        )
+        return label_url
 
     @classmethod
     def _request_pickup(cls, shipment):
@@ -988,7 +1118,22 @@ class ShiprocketService:
         if not value:
             return None
         text = str(value).strip()
-        for fmt in (None, "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+        # Shiprocket may return a relative ETD such as "2 days" from
+        # serviceability. Convert that real provider value into a concrete
+        # server-side estimate without inventing a delivery window.
+        relative = re.fullmatch(r"(?i)(\d+)\s+days?", text)
+        if relative:
+            return datetime.utcnow() + timedelta(days=int(relative.group(1)))
+        for fmt in (
+            None,
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d",
+            "%d-%m-%Y",
+            "%d/%m/%Y",
+            "%d %b %Y",
+            "%b %d, %Y",
+        ):
             try:
                 if fmt:
                     return datetime.strptime(text, fmt)
@@ -1121,6 +1266,13 @@ class ShiprocketService:
             raise ShiprocketError("Clipcart order not found.", code="ORDER_NOT_FOUND")
         if order.status in {OrderStatus.CANCELLED, OrderStatus.RETURNED}:
             return shipment
+        if not shipment.shiprocket_order_id and order.status not in {
+            OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED
+        }:
+            raise ShiprocketError(
+                "Supplier must start processing the paid order before Shiprocket shipment creation.",
+                code="SUPPLIER_PROCESSING_REQUIRED",
+            )
 
         items = [
             item
@@ -1137,6 +1289,8 @@ class ShiprocketService:
             cls._create_shiprocket_order(shipment, order, shipment.supplier_id, items)
         if not shipment.awb_code:
             cls._assign_awb(shipment)
+        if not shipment.label_url:
+            cls._generate_label(shipment)
         if not shipment.pickup_scheduled_at:
             cls._request_pickup(shipment)
         if shipment.status != "MANIFEST GENERATED":
@@ -1153,7 +1307,12 @@ class ShiprocketService:
         return shipment
 
     @classmethod
-    def ensure_order_shipments(cls, order_id, *, propagate=False):
+    def ensure_supplier_shipment(cls, order_id, supplier_id, *, propagate=False):
+        rows = cls.ensure_order_shipments(order_id, supplier_id=int(supplier_id), propagate=propagate)
+        return rows[0] if rows else None
+
+    @classmethod
+    def ensure_order_shipments(cls, order_id, *, supplier_id=None, propagate=False):
         order = (
             Order.query.options(
                 selectinload(Order.items).joinedload(OrderItem.product),
@@ -1174,13 +1333,25 @@ class ShiprocketService:
         }:
             return []
 
-        supplier_ids = sorted(
-            {
-                item.product.seller_id
+        if supplier_id is not None:
+            requested_supplier = int(supplier_id)
+            owns_items = any(
+                item.product and item.product.seller_id == requested_supplier
                 for item in order.items
-                if item.product and item.product.seller_id
-            }
-        )
+            )
+            if not owns_items:
+                raise ShiprocketError(
+                    "This supplier does not own any items in the order.",
+                    code="SUPPLIER_ORDER_ACCESS_DENIED",
+                )
+            supplier_ids = [requested_supplier]
+        else:
+            # Admin/logistics retry only reconciles shipments that were already
+            # started. It must not create shipments for suppliers who have not
+            # clicked Start Processing yet.
+            supplier_ids = sorted(
+                {row.supplier_id for row in Shipment.query.filter_by(order_id=order.id).all()}
+            )
         result = []
         for supplier_id in supplier_ids:
             reference = cls._supplier_key(order.id, supplier_id)
@@ -1261,33 +1432,85 @@ class ShiprocketService:
         return result
 
     @classmethod
+    def _extract_tracking_snapshot(cls, payload):
+        """Normalize current Shiprocket tracking response into stable Clipcart fields."""
+        if not isinstance(payload, dict):
+            return {
+                "raw": {}, "status": "", "awb": None, "courier": None,
+                "etd": None, "tracking_url": None, "timestamp": None, "events": [],
+            }
+
+        candidates = []
+        for key in ("tracking_data", "data", "tracking"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                candidates.append(value)
+        candidates.append(payload)
+
+        data = next((item for item in candidates if item), {})
+        track_rows = data.get("shipment_track") if isinstance(data.get("shipment_track"), list) else []
+        activities = data.get("shipment_track_activities") if isinstance(data.get("shipment_track_activities"), list) else []
+        latest = track_rows[-1] if track_rows else {}
+        merged = dict(data)
+        if isinstance(latest, dict):
+            merged.update(latest)
+
+        etd = cls._pick(
+            merged,
+            "etd", "edd", "estimated_delivery_date", "estimated_delivery_at",
+            "expected_delivery_date", "expected_delivery_at",
+        )
+        tracking_url = cls._pick(
+            merged, "track_url", "tracking_url", "tracking_link", "tracking_url_text", "url"
+        )
+        status = cls._pick(merged, "current_status", "shipment_status", "status", "shipment_status_text")
+        awb = cls._pick(merged, "awb_code", "awb")
+        courier = cls._pick(merged, "courier_name", "courier", "courier_company")
+        timestamp = cls._pick(
+            merged, "current_timestamp", "timestamp", "event_date", "delivered_date",
+            "latest_status_date", "last_updated_at"
+        )
+        events = activities or track_rows or merged.get("shipment_track_activities") or []
+        return {
+            "raw": data,
+            "status": str(status or "").strip().upper(),
+            "awb": str(awb or "").strip() or None,
+            "courier": str(courier or "").strip() or None,
+            "etd": cls._parse_datetime(etd),
+            "tracking_url": str(tracking_url or "").strip() or None,
+            "timestamp": cls._parse_datetime(timestamp),
+            "events": events if isinstance(events, list) else [],
+        }
+
+    @classmethod
     def track_shipment(cls, shipment):
-        payload = None
-        if shipment.awb_code:
-            payload = cls._request("GET", f"/courier/track/awb/{shipment.awb_code}")
-        elif shipment.shiprocket_shipment_id:
-            payload = cls._request(
-                "GET", f"/courier/track/shipment/{shipment.shiprocket_shipment_id}"
-            )
-        else:
+        if not shipment.awb_code and not shipment.shiprocket_shipment_id:
             raise ShiprocketError(
                 "Shipment has not been created in Shiprocket.",
                 code="SHIPMENT_NOT_CREATED",
             )
-
-        rows = payload.get("tracking_data") if isinstance(payload, dict) else None
-        data = rows if isinstance(rows, dict) else payload
-        if (
-            isinstance(data, dict)
-            and isinstance(data.get("shipment_track"), list)
-            and data["shipment_track"]
-        ):
-            latest = data["shipment_track"][-1]
-            merged = dict(data)
-            if isinstance(latest, dict):
-                merged.update(latest)
-            data = merged
-        cls._refresh_tracking_internal(shipment, data if isinstance(data, dict) else {})
+        if shipment.awb_code:
+            payload = cls._request("GET", f"/courier/track/awb/{shipment.awb_code}")
+        else:
+            payload = cls._request(
+                "GET", f"/courier/track/shipment/{shipment.shiprocket_shipment_id}"
+            )
+        snapshot = cls._extract_tracking_snapshot(payload)
+        if snapshot["status"]:
+            cls._refresh_tracking_internal(
+                shipment,
+                {**snapshot["raw"], "current_status": snapshot["status"], "awb": snapshot["awb"], "courier_name": snapshot["courier"]},
+            )
+        shipment.awb_code = snapshot["awb"] or shipment.awb_code
+        shipment.courier_name = snapshot["courier"] or shipment.courier_name
+        shipment.tracking_url = snapshot["tracking_url"] or shipment.tracking_url
+        shipment.estimated_delivery_at = snapshot["etd"] or shipment.estimated_delivery_at
+        shipment.tracking_data = snapshot["raw"] if isinstance(snapshot["raw"], dict) else None
+        shipment.tracking_events = snapshot["events"] if isinstance(snapshot["events"], list) else None
+        if snapshot["timestamp"]:
+            shipment.last_tracking_event_at = snapshot["timestamp"]
+        shipment.last_synced_at = datetime.utcnow()
+        db.session.commit()
         return shipment
 
     @classmethod
@@ -1451,13 +1674,34 @@ class ShiprocketService:
                 "No Clipcart shipment matches this Shiprocket webhook.",
                 code="WEBHOOK_SHIPMENT_NOT_FOUND",
             )
-        return cls._apply_external_status(shipment, payload, from_webhook=True)
+
+        snapshot = cls._extract_tracking_snapshot(payload)
+        shipment.tracking_data = snapshot["raw"] if isinstance(snapshot["raw"], dict) else None
+        shipment.tracking_events = snapshot["events"] if isinstance(snapshot["events"], list) else None
+        shipment.tracking_url = snapshot["tracking_url"] or shipment.tracking_url
+        shipment.estimated_delivery_at = snapshot["etd"] or shipment.estimated_delivery_at
+        if snapshot["timestamp"]:
+            shipment.last_tracking_event_at = snapshot["timestamp"]
+        result = cls._apply_external_status(shipment, payload, from_webhook=True)
+        if result:
+            db.session.commit()
+        return result
 
     @classmethod
-    def get_customer_shipments(cls, order):
+    def get_customer_shipments(cls, order, *, force_refresh=False):
         rows = sorted(
             list(getattr(order, "shipments", None) or []), key=lambda row: row.id
         )
+        now = datetime.utcnow()
+        for shipment in rows:
+            if not shipment.awb_code and not shipment.shiprocket_shipment_id:
+                continue
+            stale = force_refresh or not shipment.last_synced_at or (now - shipment.last_synced_at).total_seconds() > 300
+            if stale:
+                try:
+                    cls.track_shipment(shipment)
+                except ShiprocketError:
+                    db.session.rollback()
         return [
             cls._serialize_shipment(shipment, include_supplier=False)
             for shipment in rows
@@ -1497,11 +1741,16 @@ class ShiprocketService:
             "pickup_scheduled_at": shipment.pickup_scheduled_at,
             "awb_assigned_at": shipment.awb_assigned_at,
             "last_synced_at": shipment.last_synced_at,
+            "last_tracking_event_at": shipment.last_tracking_event_at,
             "delivered_at": shipment.delivered_at,
             "tracking_available": bool(
                 shipment.awb_code or shipment.shiprocket_shipment_id
             ),
             "tracking_reference": shipment.awb_code,
+            "label_available": bool(shipment.label_url),
+            "estimated_delivery_at": shipment.estimated_delivery_at,
+            "tracking_url": shipment.tracking_url,
+            "tracking_events": shipment.tracking_events or [],
         }
         if include_supplier:
             data["reference_id"] = shipment.shiprocket_reference_id
@@ -1509,6 +1758,8 @@ class ShiprocketService:
             data["shiprocket_shipment_id"] = shipment.shiprocket_shipment_id
             data["pickup_location_id"] = shipment.pickup_location_id
             data["pickup_location"] = shipment.pickup_location
+            data["label_available"] = bool(shipment.label_url)
+            data["label_url_available"] = bool(shipment.label_url)
             supplier = shipment.supplier
             verification = supplier.seller_verification if supplier else None
             data["supplier"] = {
