@@ -142,9 +142,16 @@ def _serialize_return_delivery(request):
 
 class OrderService:
     @staticmethod
-    def _serialize_order(order, include_events=True, image_map=None, force_shiprocket_refresh=False):
+    def _serialize_order(
+        order, include_events=True, image_map=None, force_shiprocket_refresh=False
+    ):
         invoice = getattr(order, "invoice", None)
         image_map = image_map if image_map is not None else _item_image_map(order.items)
+        # Refresh/reconcile Shiprocket state before serializing the order status so
+        # the customer never sees a stale SHIPPED badge after courier delivery.
+        shipments = ShiprocketService.get_customer_shipments(
+            order, force_refresh=force_shiprocket_refresh
+        )
         return {
             "id": order.id,
             "status": order.status.value,
@@ -198,7 +205,7 @@ class OrderService:
                 if getattr(order, "delivery_assignment", None)
                 else None
             ),
-            "shipments": ShiprocketService.get_customer_shipments(order, force_refresh=force_shiprocket_refresh),
+            "shipments": shipments,
             "items": [
                 {
                     "id": item.id,
@@ -288,7 +295,9 @@ class OrderService:
         if not order or order.account_id != account_id:
             return None
         data = OrderService._serialize_order(
-            order, image_map=_item_image_map(order.items), force_shiprocket_refresh=force_refresh
+            order,
+            image_map=_item_image_map(order.items),
+            force_shiprocket_refresh=force_refresh,
         )
         data["tracking"] = data["events"]
         return data
@@ -660,7 +669,10 @@ class OrderService:
         # A supplier can initiate fulfillment while the overall order is PAID or
         # already PROCESSING. The latter is important for multi-supplier orders: a
         # second supplier still needs to provision only their own shipment.
-        if order.status not in {OrderStatus.PAID, OrderStatus.PROCESSING} or new_status != OrderStatus.PROCESSING:
+        if (
+            order.status not in {OrderStatus.PAID, OrderStatus.PROCESSING}
+            or new_status != OrderStatus.PROCESSING
+        ):
             raise ValueError(
                 f"Suppliers cannot change {order.status.value} orders to {new_status.value}."
             )
@@ -690,13 +702,19 @@ class OrderService:
         except ShiprocketError as exc:
             current_app.logger.error(
                 "Shiprocket provisioning failed after supplier Start Processing: order=%s supplier=%s code=%s status=%s message=%s",
-                order.id, supplier_id, exc.code, exc.status_code, str(exc)[:500],
+                order.id,
+                supplier_id,
+                exc.code,
+                exc.status_code,
+                str(exc)[:500],
             )
             raise
         except Exception as exc:
             current_app.logger.exception(
                 "Unexpected Shiprocket provisioning failure after supplier Start Processing: order=%s supplier=%s: %s",
-                order.id, supplier_id, str(exc)[:500],
+                order.id,
+                supplier_id,
+                str(exc)[:500],
             )
             raise
 
@@ -811,7 +829,9 @@ class OrderService:
             except Exception as exc:
                 current_app.logger.exception(
                     "Shiprocket provisioning failed after supplier CSV processing: order=%s supplier=%s: %s",
-                    order.id, supplier_id, str(exc)[:500],
+                    order.id,
+                    supplier_id,
+                    str(exc)[:500],
                 )
         for order in changed:
             NotificationService.create(
