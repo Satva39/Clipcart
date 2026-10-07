@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   FiArrowLeft,
-  FiCheckCircle,
   FiDownload,
   FiPackage,
   FiRotateCcw,
@@ -24,6 +23,7 @@ import {
 } from "../../components/common/AsyncState";
 import { formatCurrency, formatDateTime } from "../../utils/formatters";
 import { getApiMessage } from "../../utils/apiError";
+import OrderReviewSection from "../../components/order/OrderReviewSection";
 
 function statusLabel(value) {
   return String(value || "").replaceAll("_", " ");
@@ -48,25 +48,6 @@ function returnStatusLabel(value) {
       RECEIVED: "Delivered to supplier",
       CANCELLED: "Cancelled",
     }[value] || statusLabel(value)
-  );
-}
-
-function Timeline({ events = [] }) {
-  return (
-    <div className="cc-order-timeline">
-      {events.map((event) => (
-        <div key={event.id} className="cc-timeline-item">
-          <span className="cc-timeline-dot">
-            <FiCheckCircle />
-          </span>
-          <div>
-            <strong>{event.title}</strong>
-            <p>{event.message}</p>
-            <small>{formatDateTime(event.occurred_at)}</small>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -369,6 +350,9 @@ export default function OrderDetails() {
                 </button>
               </>
             ) : null}
+            {order.status === "DELIVERED" ? (
+              <OrderReviewSection order={order} />
+            ) : null}
           </aside>
         </div>
 
@@ -502,8 +486,9 @@ export default function OrderDetails() {
         <section className="cc-detail-panel cc-order-tracking-panel">
           <div className="cc-card-head">
             <div>
+              <span className="cc-shipment-eyebrow">Shipping & delivery</span>
               <h2>Courier shipments</h2>
-              <p>Forward-delivery tracking is sourced from Shiprocket.</p>
+              <p>Live forward-delivery information from Shiprocket.</p>
             </div>
             {shipments.length ? (
               <button
@@ -534,113 +519,126 @@ export default function OrderDetails() {
               </button>
             ) : null}
           </div>
+
           {shipments.length ? (
-            <div className="space-y-3">
+            <div className="cc-shipment-list">
               {shipments.map((shipment) => (
-                <article
-                  key={shipment.id}
-                  className="cc-return-request-card"
-                  style={{ display: "grid", gap: "0.55rem" }}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <strong>Courier shipment #{shipment.id}</strong>
-                    <span className="cc-order-status">
+                <article key={shipment.id} className="cc-shipment-card">
+                  <div className="cc-shipment-card-head">
+                    <div>
+                      <span className="cc-shipment-label">
+                        Shipment #{shipment.id}
+                      </span>
+                      <h3>{shipment.courier_name || "Courier shipment"}</h3>
+                    </div>
+                    <span className="cc-order-status large">
                       {shipmentStatusLabel(shipment.status)}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-300">
-                    <span>
-                      Courier: {shipment.courier_name || "Awaiting assignment"}
-                    </span>
-                    <span>
-                      AWB: {shipment.awb_code || "Awaiting assignment"}
-                    </span>
-                    <span>
-                      Estimated delivery:{" "}
-                      {shipment.estimated_delivery_at
-                        ? formatDateTime(shipment.estimated_delivery_at)
-                        : "Not available yet"}
-                    </span>
-                    <span>
-                      Last update: {formatDateTime(shipment.last_synced_at)}
-                    </span>
+
+                  <div className="cc-shipment-meta">
+                    <div>
+                      <span>AWB</span>
+                      <strong>
+                        {shipment.awb_code || "Awaiting assignment"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Estimated delivery</span>
+                      <strong>
+                        {shipment.estimated_delivery_at
+                          ? formatDateTime(shipment.estimated_delivery_at)
+                          : "Not available yet"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Last synced</span>
+                      <strong>
+                        {shipment.last_synced_at
+                          ? formatDateTime(shipment.last_synced_at)
+                          : "Not synced yet"}
+                      </strong>
+                    </div>
                   </div>
+
                   {Array.isArray(shipment.tracking_events) &&
                   shipment.tracking_events.length ? (
-                    <div className="cc-order-timeline">
-                      {shipment.tracking_events
-                        .slice(-8)
-                        .reverse()
-                        .map((event, index) => (
-                          <div
-                            className="cc-timeline-item"
-                            key={`${shipment.id}-${index}`}
-                          >
-                            <span className="cc-timeline-dot">
-                              <FiPackage />
-                            </span>
-                            <div>
-                              <strong>
-                                {event.status ||
-                                  event.activity ||
-                                  event.current_status ||
-                                  "Shipment update"}
-                              </strong>
-                              <p>
-                                {event.location ||
-                                  event.activity ||
-                                  event.details ||
-                                  "Shiprocket tracking update"}
-                              </p>
-                              <small>
-                                {formatDateTime(
-                                  event.date ||
-                                    event.event_date ||
-                                    event.timestamp,
-                                )}
-                              </small>
+                    <div className="cc-shipment-events">
+                      <div className="cc-shipment-events-head">
+                        <strong>Latest tracking events</strong>
+                        <span>
+                          {Math.min(shipment.tracking_events.length, 6)} shown
+                        </span>
+                      </div>
+                      <div className="cc-shipment-event-list">
+                        {shipment.tracking_events
+                          .slice(-6)
+                          .reverse()
+                          .map((event, index) => (
+                            <div
+                              className="cc-shipment-event"
+                              key={`${shipment.id}-${index}`}
+                            >
+                              <span className="cc-shipment-event-dot">
+                                <FiPackage />
+                              </span>
+                              <div>
+                                <strong>
+                                  {event.status ||
+                                    event.activity ||
+                                    event.current_status ||
+                                    "Shipment update"}
+                                </strong>
+                                <p>
+                                  {event.location ||
+                                    event.activity ||
+                                    event.details ||
+                                    "Shiprocket tracking update"}
+                                </p>
+                                <small>
+                                  {formatDateTime(
+                                    event.date ||
+                                      event.event_date ||
+                                      event.timestamp,
+                                  )}
+                                </small>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                      </div>
                     </div>
                   ) : null}
-                  {shipment.tracking_url ? (
-                    <a
-                      className="cc-btn secondary"
-                      href={shipment.tracking_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Track on courier
-                    </a>
-                  ) : null}
-                  {shipment.delivered_at ? (
-                    <small className="text-gray-500">
-                      Courier marked delivered{" "}
-                      {formatDateTime(shipment.delivered_at)}.
-                    </small>
-                  ) : null}
+
+                  <div className="cc-shipment-actions">
+                    {shipment.tracking_url ? (
+                      <a
+                        className="cc-btn secondary"
+                        href={shipment.tracking_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Track shipment
+                      </a>
+                    ) : null}
+                    {shipment.delivered_at ? (
+                      <span className="cc-shipment-delivered">
+                        Delivered {formatDateTime(shipment.delivered_at)}
+                      </span>
+                    ) : null}
+                  </div>
                 </article>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400">
-              Shipment provisioning is pending.
-            </p>
-          )}
-        </section>
-
-        <section className="cc-detail-panel cc-order-tracking-panel">
-          <div className="cc-card-head">
-            <div>
-              <h2>Tracking timeline</h2>
-              <p>
-                This is the Clipcart order history. Courier events above come
-                from Shiprocket.
-              </p>
+            <div className="cc-shipment-empty">
+              <FiPackage />
+              <strong>Shipment provisioning is pending.</strong>
+              <span>
+                Shipment details will appear here once the supplier starts
+                processing the order.
+              </span>
             </div>
-          </div>
-          <Timeline events={order.events || []} />
+          )}
         </section>
 
         {order.delivery ? (

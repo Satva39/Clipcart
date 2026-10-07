@@ -3,9 +3,14 @@ from sqlalchemy import or_
 
 from app.extensions import db
 from app.modules.categories.repository import CategoryRepository
+from app.modules.order_items.models import OrderItem
+from app.modules.cart.models import CartItem
+from app.modules.wishlist.models import WishlistItem
 from app.modules.brands.repository import BrandRepository
 from app.modules.inventory.models import InventoryLog
 from app.modules.stock_alerts.services import StockAlertService
+from app.modules.stock_alerts.models import StockAlertSubscription
+from app.modules.reviews.models import Review
 from .models import Product
 from .repository import ProductRepository
 
@@ -413,7 +418,23 @@ def update_product(product, data):
 
 
 def delete_product(product):
-    # Supplier deletion is intentionally a soft delete so historical orders keep their snapshots and FKs.
-    product.status = "INACTIVE"
+    """Permanently delete never-ordered products; preserve products referenced by history."""
+    has_order_history = OrderItem.query.filter_by(product_id=product.id).first() is not None
+    if has_order_history:
+        raise ValueError(
+            "This product is linked to existing order history and cannot be permanently deleted. Deactivate it instead."
+        )
+
+    if Review.query.filter_by(product_id=product.id).first() is not None:
+        raise ValueError(
+            "This product has customer reviews and cannot be permanently deleted. Deactivate it instead."
+        )
+
+    CartItem.query.filter_by(product_id=product.id).delete(synchronize_session=False)
+    WishlistItem.query.filter_by(product_id=product.id).delete(synchronize_session=False)
+    InventoryLog.query.filter_by(product_id=product.id).delete(synchronize_session=False)
+    StockAlertSubscription.query.filter_by(product_id=product.id).delete(synchronize_session=False)
+
+    db.session.delete(product)
     db.session.commit()
     return product

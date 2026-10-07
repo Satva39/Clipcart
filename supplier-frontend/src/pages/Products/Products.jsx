@@ -60,7 +60,7 @@ export default function Products() {
   async function remove(p) {
     if (
       !window.confirm(
-        `Deactivate ${p.name}? Existing order history is preserved.`,
+        `Delete ${p.name} permanently? Products with existing order history cannot be permanently deleted.`,
       )
     )
       return;
@@ -69,7 +69,7 @@ export default function Products() {
       await deleteSupplierProduct(p.id);
       await load();
     } catch (e) {
-      setError(e?.response?.data?.message || "Unable to deactivate product.");
+      setError(e?.response?.data?.message || "Unable to delete product.");
     } finally {
       setWorking(null);
     }
@@ -211,7 +211,8 @@ export default function Products() {
                           className="icon-btn danger-btn"
                           disabled={working === p.id}
                           onClick={() => remove(p)}
-                          aria-label="Deactivate product"
+                          aria-label="Delete product"
+                          title="Delete product"
                         >
                           ×
                         </button>

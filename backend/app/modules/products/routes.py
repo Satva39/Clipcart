@@ -140,8 +140,12 @@ def delete(product_id):
     ).first()
     if not product:
         return error_response(message="Product not found.", status_code=404)
-    delete_product(product)
-    return success_response(message="Product deactivated.")
+    try:
+        delete_product(product)
+    except ValueError as exc:
+        db.session.rollback()
+        return error_response(message=str(exc), status_code=409)
+    return success_response(message="Product deleted permanently.")
 
 
 @products_bp.post("/categories/")

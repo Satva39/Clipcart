@@ -53,6 +53,7 @@ def create_app(config_class=Config):
     from app.modules.product_variants.models import ProductVariant  # noqa: F401
     from app.modules.products.models import Product  # noqa: F401
     from app.modules.reviews.models import Review  # noqa: F401
+    from app.modules.reviews.media_models import ReviewMedia  # noqa: F401
     from app.modules.seller_verification.models import SellerVerification  # noqa: F401
     from app.modules.supplier_orders.models import DeliveryAssignment  # noqa: F401
     from app.modules.shiprocket.models import Shipment  # noqa: F401

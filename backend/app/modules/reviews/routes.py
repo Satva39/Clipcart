@@ -18,7 +18,8 @@ def product_reviews(product_id):
 def my_reviews():
     return success_response(
         data=ReviewService.list_for_customer(
-            int(get_jwt_identity()), request.args.get("product_id", type=int)
+            int(get_jwt_identity()), request.args.get("product_id", type=int),
+            request.args.get("order_id", type=int),
         )
     )
 
@@ -26,7 +27,8 @@ def my_reviews():
 @reviews_bp.post("/")
 @customer_required
 def create_review():
-    data = request.get_json(silent=True) or {}
+    data = request.form.to_dict() if request.form else (request.get_json(silent=True) or {})
+    media_files = request.files.getlist("media") if request.files else []
     try:
         review = ReviewService.create_review(
             account_id=int(get_jwt_identity()),
@@ -35,6 +37,7 @@ def create_review():
             review=data.get("review"),
             title=data.get("title"),
             order_item_id=data.get("order_item_id"),
+            media_files=media_files,
         )
     except ValueError as exc:
         return error_response(message=str(exc), status_code=400)

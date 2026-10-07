@@ -3415,6 +3415,449 @@ a:focus-visible {
     border-radius: 14px;
 }
 
+
+/* Customer order shipment/review improvements. */
+.cc-shipment-list {
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.cc-shipment-card {
+    display: grid;
+    gap: 18px;
+    padding: 20px;
+    border: 1px solid #e4e8ee;
+    border-radius: 14px;
+    background: #fbfcfd;
+}
+
+.cc-shipment-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.cc-shipment-card-head h3 {
+    margin: 4px 0 0;
+    color: #1d2733;
+    font-size: 1rem;
+}
+
+.cc-shipment-eyebrow,
+.cc-shipment-label {
+    display: block;
+    color: #7b8594;
+    font-size: .7rem;
+    font-weight: 900;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.cc-shipment-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.cc-shipment-meta > div {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #e6eaef;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.cc-shipment-meta span,
+.cc-shipment-events-head span {
+    color: #7b8594;
+    font-size: .72rem;
+    font-weight: 800;
+}
+
+.cc-shipment-meta strong {
+    color: #253247;
+    font-size: .83rem;
+    overflow-wrap: anywhere;
+}
+
+.cc-shipment-events {
+    display: grid;
+    gap: 11px;
+    padding-top: 2px;
+}
+
+.cc-shipment-events-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.cc-shipment-event-list {
+    display: grid;
+    gap: 8px;
+}
+
+.cc-shipment-event {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 10px 0;
+    border-top: 1px solid #eceff2;
+}
+
+.cc-shipment-event:first-child {
+    border-top: 0;
+}
+
+.cc-shipment-event-dot {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: #fff5d8;
+    color: #8a6200;
+}
+
+.cc-shipment-event strong {
+    color: #283548;
+    font-size: .82rem;
+}
+
+.cc-shipment-event p {
+    margin: 3px 0 0;
+    color: #687486;
+    font-size: .76rem;
+    line-height: 1.45;
+}
+
+.cc-shipment-event small {
+    display: block;
+    margin-top: 4px;
+    color: #98a2af;
+    font-size: .7rem;
+}
+
+.cc-shipment-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-top: 1px;
+}
+
+.cc-shipment-delivered {
+    color: #187341;
+    font-size: .77rem;
+    font-weight: 800;
+}
+
+.cc-shipment-empty {
+    display: grid;
+    place-items: center;
+    gap: 7px;
+    padding: 28px 18px;
+    margin-top: 18px;
+    border: 1px dashed #ccd4dd;
+    border-radius: 12px;
+    background: #fbfcfd;
+    color: #687486;
+    text-align: center;
+}
+
+.cc-shipment-empty svg {
+    color: #9aa6b4;
+    font-size: 1.4rem;
+}
+
+.cc-shipment-empty strong {
+    color: #2b3849;
+}
+
+.cc-order-review-section {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid #eceff2;
+}
+
+.cc-order-review-heading {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 14px;
+}
+
+.cc-order-review-eyebrow {
+    color: #9b6a00;
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.cc-order-review-heading h3 {
+    margin: 0;
+    color: #182330;
+    font-size: 1rem;
+}
+
+.cc-order-review-heading p {
+    margin: 0;
+    color: #7b8594;
+    font-size: .76rem;
+    line-height: 1.5;
+}
+
+.cc-order-review-form {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid #e3e8ed;
+    border-radius: 12px;
+    background: #fbfcfd;
+}
+
+.cc-order-review-form > label {
+    display: grid;
+    gap: 6px;
+    color: #334155;
+    font-size: .75rem;
+    font-weight: 800;
+}
+
+.cc-order-review-stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.cc-order-review-stars button {
+    display: grid;
+    place-items: center;
+    width: 27px;
+    height: 27px;
+    padding: 0;
+    border: 1px solid #e2e7ec;
+    border-radius: 7px;
+    background: #fff;
+    color: #c5cdd6;
+    cursor: pointer;
+}
+
+.cc-order-review-stars button.active {
+    border-color: #efcf75;
+    background: #fff8df;
+    color: var(--cc-brand-2);
+}
+
+.cc-order-review-stars button:disabled {
+    cursor: default;
+}
+
+.cc-order-review-upload {
+    display: grid;
+    gap: 3px;
+    padding: 12px;
+    border: 1px dashed #cfd7df;
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.cc-order-review-upload span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #2f3d4f;
+    font-size: .77rem;
+    font-weight: 850;
+}
+
+.cc-order-review-upload small {
+    color: #8a95a3;
+    font-size: .68rem;
+}
+
+.cc-order-review-upload input {
+    margin-top: 5px;
+    width: 100%;
+    font-size: .72rem;
+}
+
+.cc-order-review-file-list {
+    display: grid;
+    gap: 6px;
+}
+
+.cc-order-review-file-list span {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: #f1f4f7;
+    color: #546173;
+    font-size: .69rem;
+}
+
+.cc-order-review-file-list span > svg {
+    flex: 0 0 auto;
+}
+
+.cc-order-review-file-list span button {
+    margin-left: auto;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: #fff;
+    color: #9e251b;
+    cursor: pointer;
+}
+
+.cc-order-review-message {
+    margin: 0;
+    color: #5f6c7c;
+    font-size: .72rem;
+    line-height: 1.45;
+}
+
+.cc-order-review-complete {
+    margin: 0;
+    padding: 12px 14px;
+    border: 1px solid #dcefe2;
+    border-radius: 10px;
+    background: #f4fbf6;
+    color: #2e6444;
+    font-size: .74rem;
+    line-height: 1.5;
+}
+
+.cc-order-review-submitted-list {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.cc-order-review-submitted {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid #e3e8ed;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.cc-order-review-submitted-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.cc-order-review-submitted-top > div:first-child {
+    display: grid;
+    gap: 4px;
+}
+
+.cc-order-review-submitted-top strong {
+    color: #253247;
+    font-size: .76rem;
+}
+
+.cc-order-review-submitted-top span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #187341;
+    font-size: .67rem;
+    font-weight: 800;
+}
+
+.cc-order-review-submitted > p {
+    margin: 0;
+    color: #586677;
+    font-size: .73rem;
+    line-height: 1.5;
+}
+
+.cc-order-review-submitted-title {
+    color: #334155;
+    font-size: .74rem;
+}
+
+.cc-order-review-score .cc-order-review-stars button {
+    width: auto;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: default;
+}
+
+.cc-review-media-grid,
+.cc-order-review-media-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.cc-review-media-link {
+    display: block;
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px solid #e1e6eb;
+}
+
+.cc-review-media {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 8px;
+    background: #f2f5f7;
+}
+
+.cc-order-review-media {
+    min-width: 0;
+}
+
+@media (max-width: 900px) {
+    .cc-shipment-meta {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .cc-shipment-card {
+        padding: 15px;
+    }
+
+    .cc-shipment-card-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .cc-order-review-submitted-top {
+        flex-direction: column;
+    }
+
+    .cc-review-media-grid,
+    .cc-order-review-media-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 /* Part 2 order lifecycle */
 .cc-order-section {
     margin: 18px 0 28px;

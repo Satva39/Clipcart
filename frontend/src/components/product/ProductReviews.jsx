@@ -34,6 +34,40 @@ function StarRating({ value, onChange, size = "default" }) {
   );
 }
 
+function ReviewMediaGrid({ media = [] }) {
+  if (!media.length) return null;
+  return (
+    <div className="cc-review-media-grid">
+      {media.map((item) =>
+        item.type === "video" ? (
+          <video
+            key={item.id}
+            className="cc-review-media"
+            src={item.url}
+            controls
+            preload="metadata"
+          />
+        ) : (
+          <a
+            key={item.id}
+            href={item.url}
+            target="_blank"
+            rel="noreferrer"
+            className="cc-review-media-link"
+          >
+            <img
+              className="cc-review-media"
+              src={item.url}
+              alt="Customer review"
+              loading="lazy"
+            />
+          </a>
+        ),
+      )}
+    </div>
+  );
+}
+
 function ReviewCard({ review, editable, onEdit, onDelete }) {
   return (
     <article className="cc-review-card">
@@ -48,6 +82,7 @@ function ReviewCard({ review, editable, onEdit, onDelete }) {
         <StarRating value={Number(review.rating || 0)} size="small" />
       </div>
       <p className="cc-review-copy">{review.review}</p>
+      <ReviewMediaGrid media={review.media} />
       {review.verified_purchase ? (
         <div className="cc-review-verified">
           <FaCheckCircle /> Verified Purchase

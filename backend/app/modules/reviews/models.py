@@ -1,6 +1,8 @@
 from app.extensions import db
 from app.shared.models.base_model import BaseModel
 
+from .media_models import ReviewMedia
+
 
 class Review(BaseModel):
 
@@ -65,4 +67,11 @@ class Review(BaseModel):
     order_item = db.relationship(
         "OrderItem",
         backref="review",
+    )
+
+    media = db.relationship(
+        "ReviewMedia",
+        back_populates="review",
+        cascade="all, delete-orphan",
+        order_by="ReviewMedia.sort_order",
     )

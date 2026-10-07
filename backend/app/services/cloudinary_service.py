@@ -11,32 +11,20 @@ class CloudinaryService:
 
     @staticmethod
     def _configure():
-        cloud_name = os.getenv(
-            "CLOUDINARY_CLOUD_NAME"
-        )
+        cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
 
-        api_key = os.getenv(
-            "CLOUDINARY_API_KEY"
-        )
+        api_key = os.getenv("CLOUDINARY_API_KEY")
 
-        api_secret = os.getenv(
-            "CLOUDINARY_API_SECRET"
-        )
+        api_secret = os.getenv("CLOUDINARY_API_SECRET")
 
         if not cloud_name:
-            raise RuntimeError(
-                "CLOUDINARY_CLOUD_NAME is missing."
-            )
+            raise RuntimeError("CLOUDINARY_CLOUD_NAME is missing.")
 
         if not api_key:
-            raise RuntimeError(
-                "CLOUDINARY_API_KEY is missing."
-            )
+            raise RuntimeError("CLOUDINARY_API_KEY is missing.")
 
         if not api_secret:
-            raise RuntimeError(
-                "CLOUDINARY_API_SECRET is missing."
-            )
+            raise RuntimeError("CLOUDINARY_API_SECRET is missing.")
 
         cloudinary.config(
             cloud_name=cloud_name,
@@ -64,9 +52,38 @@ class CloudinaryService:
         }
 
     @staticmethod
-    def delete_image(public_id):
+    def upload_media(
+        file,
+        folder="clipcart/reviews",
+    ):
+        """Upload an image or video review asset to Cloudinary."""
+        CloudinaryService._configure()
+
+        result = cloudinary.uploader.upload(
+            file,
+            folder=folder,
+            resource_type="auto",
+        )
+
+        return {
+            "secure_url": result["secure_url"],
+            "public_id": result["public_id"],
+            "resource_type": result.get("resource_type", "image"),
+            "bytes": result.get("bytes"),
+        }
+
+    @staticmethod
+    def delete_media(public_id, resource_type="image"):
         CloudinaryService._configure()
 
         return cloudinary.uploader.destroy(
-            public_id
+            public_id,
+            resource_type=resource_type,
+            invalidate=True,
         )
+
+    @staticmethod
+    def delete_image(public_id):
+        CloudinaryService._configure()
+
+        return cloudinary.uploader.destroy(public_id)
