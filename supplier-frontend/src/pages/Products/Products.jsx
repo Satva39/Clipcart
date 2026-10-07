@@ -9,6 +9,7 @@ import {
   FaPlus,
   FaSearch,
   FaToggleOff,
+  FaTrash,
   FaToggleOn,
 } from "react-icons/fa";
 import {
@@ -60,7 +61,7 @@ export default function Products() {
   async function remove(p) {
     if (
       !window.confirm(
-        `Delete ${p.name} permanently? Products with existing order history cannot be permanently deleted.`,
+        `Deactivate ${p.name}? Existing order history is preserved.`,
       )
     )
       return;
@@ -207,15 +208,17 @@ export default function Products() {
                             <FaToggleOff />
                           )}
                         </button>
-                        <button
-                          className="icon-btn danger-btn"
-                          disabled={working === p.id}
-                          onClick={() => remove(p)}
-                          aria-label="Delete product"
-                          title="Delete product"
-                        >
-                          ×
-                        </button>
+                        {p.status === "ACTIVE" ? (
+                          <button
+                            className="icon-btn danger-btn product-remove-btn"
+                            disabled={working === p.id}
+                            onClick={() => remove(p)}
+                            aria-label="Delete product"
+                            title="Delete product"
+                          >
+                            <FaTrash />
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

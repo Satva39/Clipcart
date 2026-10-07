@@ -202,46 +202,77 @@ export default function OrderDetails() {
         </div>
         <div className="detail-body">
           {shipments.length ? (
-            shipments.map((shipment) => (
-              <div
-                key={shipment.id}
-                className="detail-line"
-                style={{ alignItems: "flex-start", gap: "1rem" }}
-              >
-                <span>
-                  <b>{shipment.courier_name || "Courier pending"}</b>
-                  <br />
-                  Status:{" "}
-                  {String(shipment.status || "AWAITING SHIPMENT").replaceAll(
-                    "_",
-                    " ",
-                  )}
-                  <br />
-                  AWB: {shipment.awb_code || "Awaiting assignment"}
-                  <br />
-                  Label:{" "}
-                  {shipment.label_available ? "Ready to print" : "Not ready"}
+            shipments.map((shipment) => {
+              const shipmentStatus = String(
+                shipment.status || "AWAITING SHIPMENT",
+              ).replaceAll("_", " ");
+
+              return (
+                <article key={shipment.id} className="supplier-shipment-card">
+                  <div className="supplier-shipment-main">
+                    <div className="supplier-shipment-heading">
+                      <div>
+                        <span className="supplier-shipment-eyebrow">
+                          Shiprocket shipment
+                        </span>
+                        <h4>{shipment.courier_name || "Courier pending"}</h4>
+                      </div>
+                      <span className="supplier-shipment-status">
+                        {shipmentStatus}
+                      </span>
+                    </div>
+
+                    <div className="supplier-shipment-meta">
+                      <div className="supplier-shipment-meta-item">
+                        <span>AWB</span>
+                        <strong>
+                          {shipment.awb_code || "Awaiting assignment"}
+                        </strong>
+                      </div>
+                      <div className="supplier-shipment-meta-item">
+                        <span>Label</span>
+                        <strong>
+                          {shipment.label_available
+                            ? "Ready to print"
+                            : "Not ready"}
+                        </strong>
+                      </div>
+                      <div className="supplier-shipment-meta-item">
+                        <span>Pickup</span>
+                        <strong>
+                          {shipment.pickup_scheduled_at
+                            ? formatDateTime(shipment.pickup_scheduled_at)
+                            : "Not scheduled"}
+                        </strong>
+                      </div>
+                      <div className="supplier-shipment-meta-item">
+                        <span>Last updated</span>
+                        <strong>
+                          {shipment.last_synced_at
+                            ? formatDateTime(shipment.last_synced_at)
+                            : "Not synced yet"}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
                   {shipment.awb_code ? (
-                    <button
-                      type="button"
-                      className="action-link"
-                      onClick={() => handleLabel(shipment)}
-                      style={{ marginTop: "0.45rem" }}
-                    >
-                      <FaPrint />{" "}
-                      {shipment.label_available
-                        ? "Print label"
-                        : "Generate label"}
-                    </button>
+                    <div className="supplier-shipment-actions">
+                      <button
+                        type="button"
+                        className="supplier-shipment-label-btn"
+                        onClick={() => handleLabel(shipment)}
+                      >
+                        <FaPrint />
+                        {shipment.label_available
+                          ? "Print label"
+                          : "Generate label"}
+                      </button>
+                    </div>
                   ) : null}
-                </span>
-                <span style={{ textAlign: "right" }}>
-                  Pickup: {formatDateTime(shipment.pickup_scheduled_at)}
-                  <br />
-                  Updated: {formatDateTime(shipment.last_synced_at)}
-                </span>
-              </div>
-            ))
+                </article>
+              );
+            })
           ) : (
             <p className="panel-subtitle">Shipment provisioning is pending.</p>
           )}
