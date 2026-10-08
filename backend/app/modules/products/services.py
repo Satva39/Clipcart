@@ -11,6 +11,10 @@ from app.modules.inventory.models import InventoryLog
 from app.modules.stock_alerts.services import StockAlertService
 from app.modules.stock_alerts.models import StockAlertSubscription
 from app.modules.reviews.models import Review
+from app.modules.reviews.media_models import ReviewMedia
+from app.modules.product_images.models import ProductImage
+from app.services.cloudinary_service import CloudinaryService
+from flask import current_app
 from .models import Product
 from .repository import ProductRepository
 
@@ -418,23 +422,75 @@ def update_product(product, data):
 
 
 def delete_product(product):
-    """Permanently delete never-ordered products; preserve products referenced by history."""
-    has_order_history = OrderItem.query.filter_by(product_id=product.id).first() is not None
-    if has_order_history:
-        raise ValueError(
-            "This product is linked to existing order history and cannot be permanently deleted. Deactivate it instead."
-        )
+    """Permanently remove a supplier product and its live catalog records.
 
-    if Review.query.filter_by(product_id=product.id).first() is not None:
-        raise ValueError(
-            "This product has customer reviews and cannot be permanently deleted. Deactivate it instead."
-        )
+    Existing order rows keep their immutable product snapshots. Their live
+    product/variant foreign keys are cleared before the product is removed.
+    """
+    product.status = "INACTIVE"
+    db.session.flush()
 
-    CartItem.query.filter_by(product_id=product.id).delete(synchronize_session=False)
-    WishlistItem.query.filter_by(product_id=product.id).delete(synchronize_session=False)
-    InventoryLog.query.filter_by(product_id=product.id).delete(synchronize_session=False)
-    StockAlertSubscription.query.filter_by(product_id=product.id).delete(synchronize_session=False)
+    product_id = int(product.id)
+    product_images = ProductImage.query.filter_by(product_id=product_id).all()
+    reviews = Review.query.filter_by(product_id=product_id).all()
+    review_media = (
+        ReviewMedia.query.join(Review, ReviewMedia.review_id == Review.id)
+        .filter(Review.product_id == product_id)
+        .all()
+    )
 
+    # Live references must not outlive the product.
+    CartItem.query.filter_by(product_id=product_id).delete(synchronize_session=False)
+    WishlistItem.query.filter_by(product_id=product_id).delete(
+        synchronize_session=False
+    )
+    InventoryLog.query.filter_by(product_id=product_id).delete(
+        synchronize_session=False
+    )
+    StockAlertSubscription.query.filter_by(product_id=product_id).delete(
+        synchronize_session=False
+    )
+
+    # Preserve order history through immutable snapshots while breaking the FK.
+    OrderItem.query.filter_by(product_id=product_id).update(
+        {OrderItem.product_id: None, OrderItem.variant_id: None},
+        synchronize_session=False,
+    )
+
+    # Remove customer reviews and their media records.
+    for media in review_media:
+        try:
+            CloudinaryService.delete_media(
+                media.public_id,
+                resource_type=media.resource_type or "image",
+            )
+        except Exception:
+            current_app.logger.warning(
+                "Product delete: review media cleanup failed product=%s public_id=%s",
+                product_id,
+                media.public_id,
+            )
+    if reviews:
+        ReviewMedia.query.filter(
+            ReviewMedia.review_id.in_([row.id for row in reviews])
+        ).delete(synchronize_session=False)
+    Review.query.filter_by(product_id=product_id).delete(synchronize_session=False)
+
+    # Remove product images and attempt Cloudinary cleanup.
+    for image in product_images:
+        try:
+            CloudinaryService.delete_media(image.public_id, resource_type="image")
+        except Exception:
+            current_app.logger.warning(
+                "Product delete: product image cleanup failed product=%s public_id=%s",
+                product_id,
+                image.public_id,
+            )
+    ProductImage.query.filter_by(product_id=product_id).delete(
+        synchronize_session=False
+    )
+
+    # Product.variants are configured with delete-orphan and are removed with the product.
     db.session.delete(product)
     db.session.commit()
     return product

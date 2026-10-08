@@ -397,6 +397,12 @@ export default function Checkout() {
           </div>
         ) : null}
 
+        {summary?.shipping_error ? (
+          <div className="cc-form-error" role="alert">
+            Delivery charge unavailable: {summary.shipping_error}
+          </div>
+        ) : null}
+
         <div className="cc-checkout-layout">
           <section className="cc-checkout-main">
             <div className="cc-checkout-card">
@@ -612,6 +618,10 @@ export default function Checkout() {
               </span>
               <span>
                 Tax <strong>{formatCurrency(summary?.tax ?? 0)}</strong>
+              </span>
+              <span>
+                Delivery charge
+                <strong>{formatCurrency(summary?.shipping_charge ?? 0)}</strong>
               </span>
               <span className="total">
                 Payable <strong>{formatCurrency(summary?.total ?? 0)}</strong>

@@ -23,6 +23,9 @@ class Order(BaseModel):
     taxable_base = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     marketing_fee = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     tax = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    # Locked Shiprocket-derived delivery charge paid by the customer.
+    shipping_charge = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    shipping_quote = db.Column(db.JSON, nullable=True)
     total = db.Column(db.Numeric(12, 2), nullable=False, default=0)
 
     customer_name = db.Column(db.String(150), nullable=False, default="")

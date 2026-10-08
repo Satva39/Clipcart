@@ -2,6 +2,7 @@ import re
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from app.core.decorators import active_supplier_required
 from app.extensions import db
@@ -135,9 +136,11 @@ def update(product_id):
 @products_bp.delete("/<int:product_id>")
 @active_supplier_required
 def delete(product_id):
-    product = Product.query.filter_by(
-        id=product_id, seller_id=int(get_jwt_identity())
-    ).first()
+    product = (
+        Product.query.filter_by(id=product_id, seller_id=int(get_jwt_identity()))
+        .with_for_update()
+        .first()
+    )
     if not product:
         return error_response(message="Product not found.", status_code=404)
     try:
@@ -145,6 +148,12 @@ def delete(product_id):
     except ValueError as exc:
         db.session.rollback()
         return error_response(message=str(exc), status_code=409)
+    except IntegrityError:
+        db.session.rollback()
+        return error_response(
+            message="Product could not be deleted because another record still references it.",
+            status_code=409,
+        )
     return success_response(message="Product deleted permanently.")
 
 

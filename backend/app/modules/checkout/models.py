@@ -21,6 +21,10 @@ class CheckoutSession(BaseModel):
     taxable_base = db.Column(db.Numeric(12, 2), default=0, nullable=False)
     marketing_fee = db.Column(db.Numeric(12, 2), default=0, nullable=False)
     tax = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    # Shiprocket-derived delivery charge paid by the customer. It is intentionally
+    # outside the taxable merchandise base.
+    shipping_charge = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+    shipping_quote = db.Column(db.JSON, nullable=True)
     total = db.Column(db.Numeric(12, 2), default=0, nullable=False)
 
     payment_status = db.Column(

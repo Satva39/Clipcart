@@ -59,9 +59,10 @@ export default function Products() {
     }
   }
   async function remove(p) {
+    const action = p.status === "ACTIVE" ? "deactivate and delete" : "delete";
     if (
       !window.confirm(
-        `Deactivate ${p.name}? Existing order history is preserved.`,
+        `Delete ${p.name}? This will ${action} the product and remove its catalog records. Existing order history keeps its saved product snapshot.`,
       )
     )
       return;
@@ -208,17 +209,15 @@ export default function Products() {
                             <FaToggleOff />
                           )}
                         </button>
-                        {p.status === "ACTIVE" ? (
-                          <button
-                            className="icon-btn danger-btn product-remove-btn"
-                            disabled={working === p.id}
-                            onClick={() => remove(p)}
-                            aria-label="Delete product"
-                            title="Delete product"
-                          >
-                            <FaTrash />
-                          </button>
-                        ) : null}
+                        <button
+                          className="icon-btn danger-btn product-remove-btn"
+                          disabled={working === p.id}
+                          onClick={() => remove(p)}
+                          aria-label="Delete product"
+                          title="Delete product"
+                        >
+                          <FaTrash />
+                        </button>
                       </div>
                     </td>
                   </tr>

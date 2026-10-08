@@ -160,6 +160,7 @@ class OrderService:
             "taxable_base": float(order.taxable_base or 0),
             "marketing_fee": float(order.marketing_fee or 0),
             "tax": float(order.tax or 0),
+            "shipping_charge": float(order.shipping_charge or 0),
             "total": float(order.total or 0),
             "payment_id": order.payment_id,
             "payment_status": order.payment.status if order.payment else "UNKNOWN",
@@ -440,8 +441,11 @@ class OrderService:
     def _supplier_groups(supplier_id, status=None, search=None):
         query = (
             OrderItem.query.join(Order, Order.id == OrderItem.order_id)
-            .join(Product, Product.id == OrderItem.product_id)
-            .filter(Product.seller_id == supplier_id)
+            .outerjoin(Product, Product.id == OrderItem.product_id)
+            .filter(
+                (OrderItem.supplier_id_snapshot == supplier_id)
+                | (Product.seller_id == supplier_id)
+            )
         )
         if status:
             query = query.filter(Order.status == OrderStatus(status))
@@ -450,6 +454,7 @@ class OrderService:
             if term:
                 query = query.filter(
                     (Product.name.ilike(f"%{term}%"))
+                    | (OrderItem.product_name_snapshot.ilike(f"%{term}%"))
                     | (
                         Order.id == int(term)
                         if term.isdigit()
@@ -459,8 +464,11 @@ class OrderService:
         rows = (
             db.session.query(OrderItem, Order, Product)
             .join(Order, Order.id == OrderItem.order_id)
-            .join(Product, Product.id == OrderItem.product_id)
-            .filter(Product.seller_id == supplier_id)
+            .outerjoin(Product, Product.id == OrderItem.product_id)
+            .filter(
+                (OrderItem.supplier_id_snapshot == supplier_id)
+                | (Product.seller_id == supplier_id)
+            )
         )
         if status:
             rows = rows.filter(Order.status == OrderStatus(status))
@@ -469,6 +477,7 @@ class OrderService:
             if term:
                 rows = rows.filter(
                     (Product.name.ilike(f"%{term}%"))
+                    | (OrderItem.product_name_snapshot.ilike(f"%{term}%"))
                     | (
                         Order.id == int(term)
                         if term.isdigit()
@@ -491,7 +500,8 @@ class OrderService:
         items = [
             item
             for item in order.items
-            if item.product and item.product.seller_id == supplier_id
+            if item.supplier_id_snapshot == supplier_id
+            or (item.product and item.product.seller_id == supplier_id)
         ]
         if not items:
             return None
@@ -560,7 +570,7 @@ class OrderService:
                     "sku": (
                         item.variant.sku
                         if item.variant
-                        else (item.product.sku if item.product else None)
+                        else (item.product.sku if item.product else item.sku_snapshot)
                     ),
                 }
                 for item in items
@@ -594,7 +604,8 @@ class OrderService:
             supplier_items = [
                 item
                 for item in group_items
-                if item.product and item.product.seller_id == supplier_id
+                if item.supplier_id_snapshot == supplier_id
+            or (item.product and item.product.seller_id == supplier_id)
             ]
             previews = []
             seen_keys = set()

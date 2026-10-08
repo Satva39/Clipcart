@@ -31,6 +31,7 @@ from app.services.razorpay_service import RazorpayService
 from app.modules.notifications.enums import NotificationType
 from app.modules.notifications.services import NotificationService
 from app.modules.admin.services import AdminNotificationService
+from app.modules.shiprocket.service import ShiprocketError, ShiprocketService
 
 from .models import CheckoutSession
 from .repository import CheckoutRepository
@@ -213,7 +214,24 @@ class CheckoutService:
         charges = calculate_platform_charges(taxable_base)
         marketing_fee = money(charges["marketing_fee"])
         tax = money(charges["tax"])
-        total = money(taxable_base + marketing_fee + tax)
+
+        shipping_charge = Decimal("0.00")
+        shipping_quote = None
+        shipping_error = None
+        if session.address_id and not issues:
+            address = CustomerAddress.query.filter_by(
+                id=session.address_id, account_id=session.account_id
+            ).first()
+            try:
+                quote = ShiprocketService.quote_checkout_shipping(
+                    session.account_id, address
+                )
+                shipping_charge = money(quote.get("shipping_charge") or 0)
+                shipping_quote = quote
+            except ShiprocketError as exc:
+                shipping_error = str(exc)
+
+        total = money(taxable_base + marketing_fee + tax + shipping_charge)
 
         if persist:
             session.subtotal = money(subtotal)
@@ -221,6 +239,8 @@ class CheckoutService:
             session.taxable_base = taxable_base
             session.marketing_fee = marketing_fee
             session.tax = tax
+            session.shipping_charge = shipping_charge
+            session.shipping_quote = shipping_quote
             session.total = total
             db.session.flush()
 
@@ -241,10 +261,13 @@ class CheckoutService:
             "taxable_base": taxable_base,
             "marketing_fee": marketing_fee,
             "tax": tax,
+            "shipping_charge": float(shipping_charge),
+            "shipping_quote": shipping_quote,
+            "shipping_error": shipping_error,
             "total": total,
             "coupon": ({"id": coupon.id, "code": coupon.code} if coupon else None),
             "issues": issues,
-            "can_pay": bool(items and not issues and session.address_id),
+            "can_pay": bool(items and not issues and session.address_id and not shipping_error),
             "address_id": session.address_id,
             "payment_status": session.payment_status,
             "estimated_delivery": estimate,
@@ -320,7 +343,13 @@ class CheckoutService:
             }
         if not session.address_id:
             raise ValueError("Delivery address is required before payment.")
+        previous_total = money(session.total or 0)
+        existing_razorpay_order_id = session.razorpay_order_id
         summary = CheckoutService._calculate(session, persist=True)
+        if summary.get("shipping_error"):
+            raise ValueError(
+                f"Delivery charge could not be calculated: {summary['shipping_error']}"
+            )
         if summary["issues"]:
             raise ValueError(
                 "Please resolve unavailable or out-of-stock items before payment."
@@ -328,13 +357,23 @@ class CheckoutService:
         if summary["total"] <= 0:
             raise ValueError("Invalid order amount.")
 
-        if session.razorpay_order_id and session.payment_status == "PAYMENT_PENDING":
+        if (
+            existing_razorpay_order_id
+            and session.payment_status == "PAYMENT_PENDING"
+            and previous_total == summary["total"]
+        ):
             return {
-                "razorpay_order_id": session.razorpay_order_id,
+                "razorpay_order_id": existing_razorpay_order_id,
                 "amount": int(summary["total"] * 100),
                 "currency": "INR",
                 "public_key": summary["razorpay_key_id"],
             }
+        if existing_razorpay_order_id and session.payment_status == "PAYMENT_PENDING":
+            # The locked checkout amount changed (for example, because Shiprocket
+            # returned a different shipping quote). Never reuse a mismatched Razorpay order.
+            session.razorpay_order_id = None
+            session.payment_status = "PENDING"
+            db.session.flush()
 
         try:
             gateway_order = RazorpayService.create_order(
@@ -450,7 +489,10 @@ class CheckoutService:
         charges = calculate_platform_charges(taxable_base)
         marketing_fee = money(charges["marketing_fee"])
         tax = money(charges["tax"])
-        total = money(taxable_base + marketing_fee + tax)
+        shipping_charge = money(session.shipping_charge or 0)
+        if shipping_charge < 0:
+            raise ValueError("Invalid delivery charge.")
+        total = money(taxable_base + marketing_fee + tax + shipping_charge)
 
         if money(session.total) != total:
             raise ValueError("Checkout amount changed. Please restart payment.")
@@ -494,6 +536,8 @@ class CheckoutService:
             taxable_base=taxable_base,
             marketing_fee=marketing_fee,
             tax=tax,
+            shipping_charge=shipping_charge,
+            shipping_quote=session.shipping_quote,
             total=total,
             customer_name=account.full_name,
             customer_email=account.email,
@@ -525,6 +569,12 @@ class CheckoutService:
                 order_id=order.id,
                 product_id=product.id,
                 variant_id=variant.id if variant else None,
+                supplier_id_snapshot=product.seller_id,
+                sku_snapshot=(variant.sku if variant else product.sku),
+                shipping_weight_kg_snapshot=product.shipping_weight_kg,
+                shipping_length_cm_snapshot=product.shipping_length_cm,
+                shipping_width_cm_snapshot=product.shipping_width_cm,
+                shipping_height_cm_snapshot=product.shipping_height_cm,
                 product_name_snapshot=product.name,
                 variant_name_snapshot=variant.name if variant else None,
                 variant_value_snapshot=variant.value if variant else None,

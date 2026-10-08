@@ -315,6 +315,10 @@ export default function OrderDetails() {
               <span>
                 Tax <strong>{formatCurrency(order.tax)}</strong>
               </span>
+              <span>
+                Delivery charge
+                <strong>{formatCurrency(order.shipping_charge ?? 0)}</strong>
+              </span>
               <span className="total">
                 Total <strong>{formatCurrency(order.total)}</strong>
               </span>

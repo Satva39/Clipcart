@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
 from app.modules.accounts.models import Account
+from app.modules.cart.models import CartItem
 from app.modules.notifications.enums import NotificationType
 from app.modules.notifications.services import NotificationService
 from app.modules.order_events.services import OrderEventService
@@ -24,6 +25,14 @@ from app.modules.supplier_orders.enums import DeliveryStatus, PickupStatus
 from app.modules.supplier_orders.models import DeliveryAssignment
 
 from .models import Shipment
+
+
+def money(value):
+    """Normalize a monetary value to a two-decimal Decimal."""
+    if value is None or value == "":
+        return Decimal("0.00")
+    return Decimal(str(value)).quantize(Decimal("0.01"))
+
 
 
 class ShiprocketError(RuntimeError):
@@ -471,19 +480,34 @@ class ShiprocketService:
         rows = []
         for item in items:
             product = item.product
-            if not product:
-                raise ShiprocketError(
-                    "A purchased product is unavailable.", code="PRODUCT_NOT_FOUND"
-                )
             values = [
-                product.shipping_weight_kg,
-                product.shipping_length_cm,
-                product.shipping_width_cm,
-                product.shipping_height_cm,
+                (
+                    item.shipping_weight_kg_snapshot
+                    if item.shipping_weight_kg_snapshot is not None
+                    else (product.shipping_weight_kg if product else None)
+                ),
+                (
+                    item.shipping_length_cm_snapshot
+                    if item.shipping_length_cm_snapshot is not None
+                    else (product.shipping_length_cm if product else None)
+                ),
+                (
+                    item.shipping_width_cm_snapshot
+                    if item.shipping_width_cm_snapshot is not None
+                    else (product.shipping_width_cm if product else None)
+                ),
+                (
+                    item.shipping_height_cm_snapshot
+                    if item.shipping_height_cm_snapshot is not None
+                    else (product.shipping_height_cm if product else None)
+                ),
             ]
+            display_name = item.product_name_snapshot or (
+                product.name if product else "Product"
+            )
             if any(value is None for value in values):
                 raise ShiprocketError(
-                    f"Shipping package data is missing for product '{product.name}'.",
+                    f"Shipping package data is missing for product '{display_name}'.",
                     code="PACKAGE_DATA_MISSING",
                 )
             weight, length, width, height = [Decimal(str(value)) for value in values]
@@ -513,7 +537,7 @@ class ShiprocketService:
         }
 
     @classmethod
-    def _build_payload(cls, order, supplier_id, items, pickup_name):
+    def _build_payload(cls, order, supplier_id, items, pickup_name, shipment=None):
         postal_code = re.sub(r"\s+", "", str(order.delivery_postal_code or ""))
         if (
             order.delivery_country
@@ -584,17 +608,20 @@ class ShiprocketService:
         for item in items:
             product = item.product
             variant = item.variant
-            name = item.product_name_snapshot or product.name
+            name = item.product_name_snapshot or (
+                product.name if product else "Product"
+            )
             variant_label = item.variant_value_snapshot or (
                 variant.value if variant else None
             )
             if variant_label:
                 name = f"{name} - {variant_label}"
+            sku = variant.sku if variant else (product.sku if product else None)
+            sku = sku or item.sku_snapshot or f"CLP-ITEM-{item.id}"
             order_items.append(
                 {
                     "name": name[:255],
-                    "sku": (variant.sku if variant else product.sku)
-                    or f"CLP-{product.id}",
+                    "sku": sku[:100],
                     "units": int(item.quantity),
                     "selling_price": float(item.unit_price),
                     "discount": 0,
@@ -626,6 +653,14 @@ class ShiprocketService:
             else Decimal("0")
         )
         transaction_charges = marketing_allocation + tax_allocation
+        shipping_charge = Decimal("0.00")
+        if shipment is not None and shipment.quoted_shipping_charge is not None:
+            shipping_charge = money(shipment.quoted_shipping_charge)
+        elif isinstance(order.shipping_quote, dict):
+            for quote in order.shipping_quote.get("suppliers", []):
+                if int(quote.get("supplier_id") or 0) == int(supplier_id):
+                    shipping_charge = money(quote.get("shipping_charge") or 0)
+                    break
         comment = (
             "Clipcart supplier shipment allocation: "
             f"marketing fee ₹{marketing_allocation:.2f}, tax ₹{tax_allocation:.2f}."
@@ -660,7 +695,7 @@ class ShiprocketService:
             "shipping_phone": int(phone_digits),
             "order_items": order_items,
             "payment_method": "Prepaid",
-            "shipping_charges": 0,
+            "shipping_charges": float(shipping_charge),
             "giftwrap_charges": 0,
             "transaction_charges": float(transaction_charges),
             "total_discount": float(supplier_discount),
@@ -779,6 +814,184 @@ class ShiprocketService:
         shipment.last_synced_at = datetime.utcnow()
         db.session.commit()
         return True
+
+    @classmethod
+    def quote_checkout_shipping(cls, account_id, address):
+        """Return the current Shiprocket delivery charge for the checkout cart.
+
+        Clipcart creates one forward shipment per supplier, so the checkout quote
+        is the sum of one selected courier quote per supplier. Shiprocket's own
+        recommended courier is preferred; otherwise the lowest non-blocked rate
+        is selected. The chosen courier is persisted so AWB assignment can target
+        the same provider and keep the customer's quoted amount consistent.
+        """
+        if not current_app.config.get("SHIPROCKET_EMAIL") or not current_app.config.get(
+            "SHIPROCKET_PASSWORD"
+        ):
+            raise ShiprocketError(
+                "Shiprocket is not configured, so the delivery charge cannot be calculated.",
+                code="SHIPROCKET_NOT_CONFIGURED",
+                retryable=False,
+            )
+        if not address:
+            raise ShiprocketError(
+                "A delivery address is required before calculating the delivery charge.",
+                code="DELIVERY_ADDRESS_REQUIRED",
+                retryable=False,
+            )
+
+        items = (
+            CartItem.query.options(
+                joinedload(CartItem.product),
+                joinedload(CartItem.variant),
+            )
+            .filter_by(account_id=int(account_id))
+            .order_by(CartItem.id.asc())
+            .all()
+        )
+        if not items:
+            raise ShiprocketError("Cart is empty.", code="CART_EMPTY", retryable=False)
+
+        supplier_items = {}
+        for item in items:
+            product = item.product
+            if not product or product.status != "ACTIVE":
+                continue
+            variant = item.variant
+            if item.variant_id is not None and (
+                not variant or variant.product_id != product.id or not variant.is_active
+            ):
+                continue
+            supplier_items.setdefault(int(product.seller_id), []).append(item)
+
+        if not supplier_items:
+            raise ShiprocketError(
+                "No available supplier items are present in the cart.",
+                code="NO_SHIPPABLE_ITEMS",
+                retryable=False,
+            )
+
+        delivery_postcode = re.sub(r"\s+", "", str(address.postal_code or ""))
+        if not re.fullmatch(r"[1-9]\d{5}", delivery_postcode):
+            raise ShiprocketError(
+                "The delivery pincode must be a valid 6-digit Indian pincode.",
+                code="DELIVERY_PINCODE_INVALID",
+                retryable=False,
+            )
+
+        breakdown = []
+        total = Decimal("0.00")
+        for supplier_id, supplier_cart_items in sorted(supplier_items.items()):
+            pickup = cls._supplier_address(supplier_id)
+            package = cls._package_dimensions(supplier_cart_items)
+            supplier_subtotal = sum(
+                (
+                    money(item.variant.price if item.variant else item.product.price)
+                    * int(item.quantity or 0)
+                    for item in supplier_cart_items
+                ),
+                Decimal("0.00"),
+            )
+            try:
+                pickup_postcode = int(re.sub(r"\s+", "", str(pickup["pin_code"])))
+                delivery_pin = int(delivery_postcode)
+            except (TypeError, ValueError):
+                raise ShiprocketError(
+                    "Both supplier and customer pincodes must be valid before payment.",
+                    code="PINCODE_INVALID",
+                    retryable=False,
+                )
+
+            response = cls._request(
+                "GET",
+                "/courier/serviceability/",
+                params={
+                    "pickup_postcode": pickup_postcode,
+                    "delivery_postcode": delivery_pin,
+                    "cod": 0,
+                    "weight": package["weight"],
+                    "length": package["length"],
+                    "breadth": package["breadth"],
+                    "height": package["height"],
+                    "declared_value": float(supplier_subtotal),
+                },
+            )
+            data = response.get("data") if isinstance(response, dict) else None
+            data = data if isinstance(data, dict) else {}
+            rows = (
+                data.get("available_courier_companies")
+                or data.get("available_courier")
+                or []
+            )
+            if not isinstance(rows, list):
+                rows = []
+
+            eligible = []
+            for row in rows:
+                if not isinstance(row, dict) or row.get("blocked") in (1, "1", True):
+                    continue
+                courier_id = cls._int_or_none(
+                    row.get("courier_company_id") or row.get("id")
+                )
+                rate_value = row.get("freight_charge")
+                if rate_value in (None, ""):
+                    rate_value = row.get("rate")
+                try:
+                    rate = Decimal(str(rate_value))
+                except Exception:
+                    continue
+                if courier_id is None or rate < 0:
+                    continue
+                eligible.append((courier_id, rate, row))
+
+            if not eligible:
+                raise ShiprocketError(
+                    f"Shiprocket has no usable delivery quote for supplier pincode {pickup_postcode} to {delivery_postcode}.",
+                    code="NO_SERVICEABLE_COURIER",
+                    retryable=False,
+                )
+
+            recommended_id = cls._int_or_none(
+                data.get("recommended_courier_company_id")
+                or data.get("shiprocket_recommended_courier_id")
+            )
+            selected = next(
+                (item for item in eligible if item[0] == recommended_id),
+                None,
+            )
+            if selected is None:
+                selected = min(eligible, key=lambda item: item[1])
+
+            courier_id, rate, row = selected
+            rate = money(rate)
+            total += rate
+            breakdown.append(
+                {
+                    "supplier_id": supplier_id,
+                    "pickup_postcode": str(pickup_postcode),
+                    "delivery_postcode": delivery_postcode,
+                    "shipping_charge": float(rate),
+                    "courier_company_id": courier_id,
+                    "courier_name": str(row.get("courier_name") or "").strip() or None,
+                    "estimated_delivery_days": row.get("estimated_delivery_days"),
+                    "etd": row.get("etd") or row.get("edd"),
+                    "weight": package["weight"],
+                }
+            )
+
+        total = money(total)
+        current_app.logger.info(
+            "Shiprocket checkout quote: account=%s address=%s suppliers=%s total=%s",
+            account_id,
+            address.id,
+            len(breakdown),
+            total,
+        )
+        return {
+            "shipping_charge": float(total),
+            "currency": "INR",
+            "suppliers": breakdown,
+        }
 
     @classmethod
     def _check_serviceability(cls, shipment, order, items):
@@ -914,10 +1127,13 @@ class ShiprocketService:
                 "Cannot assign an AWB before shipment creation.",
                 code="SHIPMENT_ID_MISSING",
             )
+        awb_body = {"shipment_id": int(shipment.shiprocket_shipment_id)}
+        if shipment.quoted_courier_company_id:
+            awb_body["courier_id"] = int(shipment.quoted_courier_company_id)
         response = cls._request(
             "POST",
             "/courier/assign/awb",
-            json_body={"shipment_id": int(shipment.shiprocket_shipment_id)},
+            json_body=awb_body,
         )
         result = response.get("response") if isinstance(response, dict) else None
         data = result.get("data") if isinstance(result, dict) else None
@@ -1317,7 +1533,8 @@ class ShiprocketService:
         items = [
             item
             for item in order.items
-            if item.product and item.product.seller_id == shipment.supplier_id
+            if item.supplier_id_snapshot == shipment.supplier_id
+            or (item.product and item.product.seller_id == shipment.supplier_id)
         ]
         if not items:
             raise ShiprocketError(
@@ -1412,6 +1629,19 @@ class ShiprocketService:
                     shiprocket_reference_id=reference,
                     status="PENDING",
                 )
+                if isinstance(order.shipping_quote, dict):
+                    for quote in order.shipping_quote.get("suppliers", []):
+                        if int(quote.get("supplier_id") or 0) == int(supplier_id):
+                            shipment.quoted_shipping_charge = money(
+                                quote.get("shipping_charge") or 0
+                            )
+                            shipment.quoted_courier_company_id = cls._int_or_none(
+                                quote.get("courier_company_id")
+                            )
+                            shipment.quoted_courier_name = (
+                                str(quote.get("courier_name") or "").strip() or None
+                            )
+                            break
                 try:
                     db.session.add(shipment)
                     db.session.flush()
@@ -1427,6 +1657,22 @@ class ShiprocketService:
                     )
                     if not shipment:
                         raise
+            if shipment.quoted_shipping_charge is None and isinstance(
+                order.shipping_quote, dict
+            ):
+                for quote in order.shipping_quote.get("suppliers", []):
+                    if int(quote.get("supplier_id") or 0) == int(supplier_id):
+                        shipment.quoted_shipping_charge = money(
+                            quote.get("shipping_charge") or 0
+                        )
+                        shipment.quoted_courier_company_id = cls._int_or_none(
+                            quote.get("courier_company_id")
+                        )
+                        shipment.quoted_courier_name = (
+                            str(quote.get("courier_name") or "").strip() or None
+                        )
+                        db.session.commit()
+                        break
             try:
                 cls._provision_shipment(shipment)
             except ShiprocketError as exc:
@@ -1727,7 +1973,12 @@ class ShiprocketService:
 
         supplier_ids = sorted(
             {
-                item.product.seller_id
+                int(item.supplier_id_snapshot)
+                for item in order.items
+                if item.supplier_id_snapshot
+            }
+            | {
+                int(item.product.seller_id)
                 for item in order.items
                 if item.product and item.product.seller_id
             }

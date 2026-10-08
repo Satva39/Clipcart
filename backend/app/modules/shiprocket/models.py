@@ -34,6 +34,11 @@ class Shipment(BaseModel):
     courier_company_id = db.Column(db.Integer, nullable=True)
     courier_name = db.Column(db.String(255), nullable=True)
 
+    # Shiprocket quote locked during customer checkout for this supplier.
+    quoted_shipping_charge = db.Column(db.Numeric(12, 2), nullable=True)
+    quoted_courier_company_id = db.Column(db.Integer, nullable=True)
+    quoted_courier_name = db.Column(db.String(255), nullable=True)
+
     pickup_location_id = db.Column(db.String(64), nullable=True)
     pickup_location = db.Column(db.String(100), nullable=True)
 

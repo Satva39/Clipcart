@@ -15,8 +15,17 @@ class OrderItem(BaseModel):
     product_id = db.Column(
         db.Integer,
         db.ForeignKey("products.id"),
-        nullable=False,
+        nullable=True,
     )
+
+    # Immutable fulfillment/catalog ownership snapshot. These remain after a
+    # supplier permanently deletes the live product record.
+    supplier_id_snapshot = db.Column(db.Integer, nullable=True, index=True)
+    sku_snapshot = db.Column(db.String(100), nullable=True)
+    shipping_weight_kg_snapshot = db.Column(db.Numeric(10, 3), nullable=True)
+    shipping_length_cm_snapshot = db.Column(db.Numeric(10, 2), nullable=True)
+    shipping_width_cm_snapshot = db.Column(db.Numeric(10, 2), nullable=True)
+    shipping_height_cm_snapshot = db.Column(db.Numeric(10, 2), nullable=True)
 
     variant_id = db.Column(
         db.Integer,

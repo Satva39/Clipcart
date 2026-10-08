@@ -216,6 +216,7 @@ class InvoiceService:
                 "Tax",
                 f"₹ {Decimal(str(order.tax)):.2f}",
             ],
+            ["Delivery charge", f"₹ {Decimal(str(order.shipping_charge or 0)):.2f}"],
             ["Final total", f"₹ {Decimal(str(order.total)):.2f}"],
         ]
         totals_table = Table(totals, colWidths=[125 * mm, 55 * mm], hAlign="RIGHT")
@@ -223,8 +224,8 @@ class InvoiceService:
             TableStyle(
                 [
                     ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-                    ("LINEABOVE", (0, 4), (-1, 4), 0.8, colors.HexColor("#222222")),
-                    ("FONTNAME", (0, 4), (-1, 4), "Helvetica-Bold"),
+                    ("LINEABOVE", (0, 5), (-1, 5), 0.8, colors.HexColor("#222222")),
+                    ("FONTNAME", (0, 5), (-1, 5), "Helvetica-Bold"),
                     ("FONTSIZE", (0, 0), (-1, -1), 9),
                     ("TOPPADDING", (0, 0), (-1, -1), 4),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
