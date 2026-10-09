@@ -23,6 +23,20 @@ import { getApiMessage } from "../../utils/apiError";
 import { formatCurrency } from "../../utils/formatters";
 import Container from "../../components/common/Container";
 
+function isValidPhoneForCountry(value, country = "India") {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (
+    String(country || "India")
+      .trim()
+      .toLowerCase() === "india"
+  ) {
+    return (
+      digits.length === 10 || (digits.length === 12 && digits.startsWith("91"))
+    );
+  }
+  return digits.length >= 7 && digits.length <= 15;
+}
+
 const emptyForm = {
   full_name: "",
   phone: "",
@@ -146,12 +160,29 @@ export default function Checkout() {
 
   function startAdd() {
     setEditingAddressId(null);
+    const selectedSavedAddress =
+      addresses.find((item) => item.id === selectedAddressId) ||
+      addresses.find((item) => item.is_default) ||
+      addresses[0];
+    const savedPhone = isValidPhoneForCountry(
+      selectedSavedAddress?.phone,
+      selectedSavedAddress?.country || "India",
+    )
+      ? selectedSavedAddress.phone
+      : "";
+    const accountPhone = isValidPhoneForCountry(user.phone, "India")
+      ? user.phone
+      : "";
     setForm({
       ...emptyForm,
-      full_name: user.full_name || "",
-      phone: user.phone || "",
+      full_name: user.full_name || selectedSavedAddress?.full_name || "",
+      // Prefer the selected saved address's known-valid contact number over a
+      // potentially stale/incomplete account profile phone number.
+      phone: savedPhone || accountPhone,
+      country: selectedSavedAddress?.country || "India",
     });
     setShowForm(true);
+    setError("");
   }
 
   function startEdit(address) {
@@ -184,12 +215,41 @@ export default function Checkout() {
 
   async function saveAddress(event) {
     event.preventDefault();
-    setAddressBusy(true);
     setError("");
+
+    if (!isValidPhoneForCountry(form.phone, form.country)) {
+      setError(
+        String(form.country || "India")
+          .trim()
+          .toLowerCase() === "india"
+          ? "Enter a valid 10-digit Indian mobile number. You may include +91."
+          : "Enter a valid phone number with 7 to 15 digits.",
+      );
+      return;
+    }
+
+    const postalCode = String(form.postal_code || "").replace(/\s+/g, "");
+    if (
+      String(form.country || "India")
+        .trim()
+        .toLowerCase() === "india" &&
+      !/^[1-9]\d{5}$/.test(postalCode)
+    ) {
+      setError("Enter a valid 6-digit Indian postal code.");
+      return;
+    }
+
+    const payload = {
+      ...form,
+      phone: String(form.phone || "").trim(),
+      postal_code: postalCode,
+      country: String(form.country || "India").trim() || "India",
+    };
+    setAddressBusy(true);
     try {
       const saved = editingAddressId
-        ? await updateAddress(editingAddressId, form)
-        : await createAddress(form);
+        ? await updateAddress(editingAddressId, payload)
+        : await createAddress(payload);
       setAddresses((current) => {
         const mapped = current.filter((item) => item.id !== saved.id);
         return [saved, ...mapped].map((item) => ({
@@ -512,6 +572,15 @@ export default function Checkout() {
                         {label}
                         <input
                           required={required}
+                          type={field === "phone" ? "tel" : "text"}
+                          minLength={field === "phone" ? 10 : undefined}
+                          maxLength={
+                            field === "phone"
+                              ? 20
+                              : field === "postal_code"
+                                ? 20
+                                : undefined
+                          }
                           value={form[field]}
                           onChange={(e) =>
                             setForm((current) => ({
@@ -520,9 +589,11 @@ export default function Checkout() {
                             }))
                           }
                           inputMode={
-                            field === "phone" || field === "postal_code"
-                              ? "numeric"
-                              : undefined
+                            field === "phone"
+                              ? "tel"
+                              : field === "postal_code"
+                                ? "numeric"
+                                : undefined
                           }
                         />
                       </label>

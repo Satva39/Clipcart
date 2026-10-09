@@ -230,6 +230,14 @@ class CheckoutService:
                 shipping_quote = quote
             except ShiprocketError as exc:
                 shipping_error = str(exc)
+                current_app.logger.warning(
+                    "Checkout Shiprocket quote failed: customer_account=%s address_id=%s code=%s retryable=%s message=%s",
+                    session.account_id,
+                    session.address_id,
+                    exc.code or "SHIPROCKET_ERROR",
+                    bool(exc.retryable),
+                    str(exc)[:400],
+                )
 
         total = money(taxable_base + marketing_fee + tax + shipping_charge)
 

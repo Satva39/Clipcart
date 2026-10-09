@@ -15,6 +15,27 @@ customer_addresses_bp = Blueprint(
 )
 
 
+def _format_validation_errors(errors):
+    """Flatten Marshmallow field errors into a readable API message."""
+    parts = []
+
+    def visit(value, prefix=""):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                label = f"{prefix} {key.replace('_', ' ')}".strip()
+                visit(child, label)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                visit(child, prefix)
+        else:
+            message = str(value).strip()
+            if message:
+                parts.append(f"{prefix.title()}: {message}" if prefix else message)
+
+    visit(errors)
+    return "; ".join(parts) or "Please correct the address fields and try again."
+
+
 def serialize_address(address):
     return {
         "id": address.id,
@@ -28,7 +49,9 @@ def serialize_address(address):
         "postal_code": address.postal_code,
         "country": address.country,
         "latitude": float(address.latitude) if address.latitude is not None else None,
-        "longitude": float(address.longitude) if address.longitude is not None else None,
+        "longitude": (
+            float(address.longitude) if address.longitude is not None else None
+        ),
         "is_default": address.is_default,
     }
 
@@ -40,7 +63,9 @@ def create():
     data = request.get_json(silent=True) or {}
     errors = CustomerAddressSchema().validate(data)
     if errors:
-        return error_response(message=errors, status_code=400)
+        return error_response(
+            message=_format_validation_errors(errors), status_code=400
+        )
 
     try:
         address = CustomerAddressService.create(account_id, data)
@@ -68,7 +93,9 @@ def update_address(address_id):
     data = request.get_json(silent=True) or {}
     errors = CustomerAddressSchema(partial=True).validate(data)
     if errors:
-        return error_response(message=errors, status_code=400)
+        return error_response(
+            message=_format_validation_errors(errors), status_code=400
+        )
 
     try:
         address = CustomerAddressService.update(account_id, address_id, data)

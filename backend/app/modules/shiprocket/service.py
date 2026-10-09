@@ -34,7 +34,6 @@ def money(value):
     return Decimal(str(value)).quantize(Decimal("0.01"))
 
 
-
 class ShiprocketError(RuntimeError):
     def __init__(self, message, *, code=None, status_code=None, retryable=False):
         super().__init__(message)
@@ -310,19 +309,29 @@ class ShiprocketService:
 
     @staticmethod
     def _supplier_address(supplier_id):
-        supplier = (
-            Account.query.options(joinedload(Account.seller_verification))
-            .filter_by(id=supplier_id)
-            .first()
-        )
+        # Resolve the supplier account first, then query the same table and key
+        # used by SupplierPortalService.profile/update_profile. Querying directly
+        # avoids relying on a potentially stale one-to-one relationship cache.
+        supplier = Account.query.filter_by(id=int(supplier_id)).first()
         if not supplier:
+            current_app.logger.warning(
+                "Shiprocket pickup lookup failed: supplier account missing; supplier_id=%s",
+                supplier_id,
+            )
             raise ShiprocketError(
                 "Supplier account not found.", code="SUPPLIER_NOT_FOUND"
             )
-        verification = supplier.seller_verification
+
+        verification = SellerVerification.query.filter_by(
+            account_id=supplier.id
+        ).first()
         if not verification:
+            current_app.logger.warning(
+                "Shiprocket pickup lookup failed: no seller_verifications row; supplier_id=%s",
+                supplier.id,
+            )
             raise ShiprocketError(
-                "Supplier pickup address is not configured in Clipcart.",
+                "The warehouse address is missing for the supplier who owns an item in this cart. The relevant supplier must save their warehouse address in Clipcart Profile & Settings.",
                 code="SUPPLIER_PICKUP_MISSING",
             )
 
@@ -882,6 +891,13 @@ class ShiprocketService:
         breakdown = []
         total = Decimal("0.00")
         for supplier_id, supplier_cart_items in sorted(supplier_items.items()):
+            current_app.logger.info(
+                "Shiprocket checkout pickup lookup: customer_account=%s supplier_id=%s product_ids=%s cart_item_ids=%s",
+                account_id,
+                supplier_id,
+                [item.product_id for item in supplier_cart_items],
+                [item.id for item in supplier_cart_items],
+            )
             pickup = cls._supplier_address(supplier_id)
             package = cls._package_dimensions(supplier_cart_items)
             supplier_subtotal = sum(
