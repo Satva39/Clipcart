@@ -27,13 +27,6 @@ from app.modules.supplier_orders.models import DeliveryAssignment
 from .models import Shipment
 
 
-def money(value):
-    """Normalize a monetary value to a two-decimal Decimal."""
-    if value is None or value == "":
-        return Decimal("0.00")
-    return Decimal(str(value)).quantize(Decimal("0.01"))
-
-
 class ShiprocketError(RuntimeError):
     def __init__(self, message, *, code=None, status_code=None, retryable=False):
         super().__init__(message)
@@ -309,29 +302,19 @@ class ShiprocketService:
 
     @staticmethod
     def _supplier_address(supplier_id):
-        # Resolve the supplier account first, then query the same table and key
-        # used by SupplierPortalService.profile/update_profile. Querying directly
-        # avoids relying on a potentially stale one-to-one relationship cache.
-        supplier = Account.query.filter_by(id=int(supplier_id)).first()
+        supplier = (
+            Account.query.options(joinedload(Account.seller_verification))
+            .filter_by(id=supplier_id)
+            .first()
+        )
         if not supplier:
-            current_app.logger.warning(
-                "Shiprocket pickup lookup failed: supplier account missing; supplier_id=%s",
-                supplier_id,
-            )
             raise ShiprocketError(
                 "Supplier account not found.", code="SUPPLIER_NOT_FOUND"
             )
-
-        verification = SellerVerification.query.filter_by(
-            account_id=supplier.id
-        ).first()
+        verification = supplier.seller_verification
         if not verification:
-            current_app.logger.warning(
-                "Shiprocket pickup lookup failed: no seller_verifications row; supplier_id=%s",
-                supplier.id,
-            )
             raise ShiprocketError(
-                "The warehouse address is missing for the supplier who owns an item in this cart. The relevant supplier must save their warehouse address in Clipcart Profile & Settings.",
+                "Supplier pickup address is not configured in Clipcart.",
                 code="SUPPLIER_PICKUP_MISSING",
             )
 
@@ -491,27 +474,29 @@ class ShiprocketService:
             product = item.product
             values = [
                 (
-                    item.shipping_weight_kg_snapshot
-                    if item.shipping_weight_kg_snapshot is not None
+                    getattr(item, "shipping_weight_kg_snapshot", None)
+                    if getattr(item, "shipping_weight_kg_snapshot", None) is not None
                     else (product.shipping_weight_kg if product else None)
                 ),
                 (
-                    item.shipping_length_cm_snapshot
-                    if item.shipping_length_cm_snapshot is not None
+                    getattr(item, "shipping_length_cm_snapshot", None)
+                    if getattr(item, "shipping_length_cm_snapshot", None) is not None
                     else (product.shipping_length_cm if product else None)
                 ),
                 (
-                    item.shipping_width_cm_snapshot
-                    if item.shipping_width_cm_snapshot is not None
+                    getattr(item, "shipping_width_cm_snapshot", None)
+                    if getattr(item, "shipping_width_cm_snapshot", None) is not None
                     else (product.shipping_width_cm if product else None)
                 ),
                 (
-                    item.shipping_height_cm_snapshot
-                    if item.shipping_height_cm_snapshot is not None
+                    getattr(item, "shipping_height_cm_snapshot", None)
+                    if getattr(item, "shipping_height_cm_snapshot", None) is not None
                     else (product.shipping_height_cm if product else None)
                 ),
             ]
-            display_name = item.product_name_snapshot or (
+            # CartItem does not persist order-line snapshots; OrderItem does.
+            # Use the snapshot when available and otherwise use the live product name.
+            display_name = getattr(item, "product_name_snapshot", None) or (
                 product.name if product else "Product"
             )
             if any(value is None for value in values):
@@ -891,44 +876,7 @@ class ShiprocketService:
         breakdown = []
         total = Decimal("0.00")
         for supplier_id, supplier_cart_items in sorted(supplier_items.items()):
-            product_ids = [item.product_id for item in supplier_cart_items]
-            product_names = [
-                (
-                    str(item.product.name or f"Product #{item.product_id}")
-                    if item.product
-                    else f"Product #{item.product_id}"
-                )
-                for item in supplier_cart_items
-            ]
-            current_app.logger.info(
-                "Shiprocket checkout pickup lookup: customer_account=%s supplier_id=%s product_ids=%s product_names=%s cart_item_ids=%s",
-                account_id,
-                supplier_id,
-                product_ids,
-                product_names,
-                [item.id for item in supplier_cart_items],
-            )
-            try:
-                pickup = cls._supplier_address(supplier_id)
-            except ShiprocketError as exc:
-                current_app.logger.error(
-                    "Shiprocket checkout pickup resolution failed: customer_account=%s supplier_id=%s product_ids=%s product_names=%s code=%s",
-                    account_id,
-                    supplier_id,
-                    product_ids,
-                    product_names,
-                    exc.code or "SHIPROCKET_ERROR",
-                )
-                if exc.code == "SUPPLIER_PICKUP_MISSING":
-                    item_label = (
-                        ", ".join(dict.fromkeys(product_names[:3])) or "a cart item"
-                    )
-                    raise ShiprocketError(
-                        f"The supplier who owns {item_label} has not saved a warehouse address for pickup. The address saved in your currently open supplier profile can only be used for products owned by that same supplier account. Please check the Render log for the supplier_id associated with this product.",
-                        code="SUPPLIER_PICKUP_MISSING",
-                        retryable=False,
-                    ) from exc
-                raise
+            pickup = cls._supplier_address(supplier_id)
             package = cls._package_dimensions(supplier_cart_items)
             supplier_subtotal = sum(
                 (
