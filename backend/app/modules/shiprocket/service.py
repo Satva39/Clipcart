@@ -3,7 +3,7 @@ import json
 import re
 import threading
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 import requests
 from flask import current_app
@@ -25,6 +25,16 @@ from app.modules.supplier_orders.enums import DeliveryStatus, PickupStatus
 from app.modules.supplier_orders.models import DeliveryAssignment
 
 from .models import Shipment
+
+
+def money(value):
+    """Convert a currency-like value to a two-decimal Decimal safely."""
+    if value is None or value == "":
+        return Decimal("0.00")
+    try:
+        return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError("Invalid monetary value") from exc
 
 
 class ShiprocketError(RuntimeError):
@@ -476,29 +486,27 @@ class ShiprocketService:
                 (
                     getattr(item, "shipping_weight_kg_snapshot", None)
                     if getattr(item, "shipping_weight_kg_snapshot", None) is not None
-                    else (product.shipping_weight_kg if product else None)
+                    else (getattr(product, "shipping_weight_kg", None) if product else None)
                 ),
                 (
                     getattr(item, "shipping_length_cm_snapshot", None)
                     if getattr(item, "shipping_length_cm_snapshot", None) is not None
-                    else (product.shipping_length_cm if product else None)
+                    else (getattr(product, "shipping_length_cm", None) if product else None)
                 ),
                 (
                     getattr(item, "shipping_width_cm_snapshot", None)
                     if getattr(item, "shipping_width_cm_snapshot", None) is not None
-                    else (product.shipping_width_cm if product else None)
+                    else (getattr(product, "shipping_width_cm", None) if product else None)
                 ),
                 (
                     getattr(item, "shipping_height_cm_snapshot", None)
                     if getattr(item, "shipping_height_cm_snapshot", None) is not None
-                    else (product.shipping_height_cm if product else None)
+                    else (getattr(product, "shipping_height_cm", None) if product else None)
                 ),
             ]
-            # CartItem does not persist order-line snapshots; OrderItem does.
-            # Use the snapshot when available and otherwise use the live product name.
             display_name = getattr(item, "product_name_snapshot", None) or (
-                product.name if product else "Product"
-            )
+                getattr(product, "name", None) if product else None
+            ) or "Product"
             if any(value is None for value in values):
                 raise ShiprocketError(
                     f"Shipping package data is missing for product '{display_name}'.",
@@ -507,7 +515,7 @@ class ShiprocketService:
             weight, length, width, height = [Decimal(str(value)) for value in values]
             if weight <= 0 or min(length, width, height) <= Decimal("0.5"):
                 raise ShiprocketError(
-                    f"Shipping package data is invalid for product '{product.name}'.",
+                    f"Shipping package data is invalid for product '{display_name}'.",
                     code="PACKAGE_DATA_INVALID",
                 )
             rows.append((weight, length, width, height))
