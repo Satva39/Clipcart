@@ -307,6 +307,21 @@ export default function Profile() {
                   </p>
                 </div>
               </div>
+              <div className="warehouse-address-owner">
+                <span className="warehouse-address-owner-icon">
+                  <FaBuilding />
+                </span>
+                <div className="warehouse-address-owner-copy">
+                  <span>Pickup address owner</span>
+                  <strong>
+                    Supplier account #{profile?.account?.id ?? "—"}
+                  </strong>
+                  <small>
+                    This warehouse address is used only for products owned by
+                    this supplier account.
+                  </small>
+                </div>
+              </div>
               <div className="form-card">
                 <div className="profile-location-actions">
                   <button

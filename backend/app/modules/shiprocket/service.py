@@ -891,14 +891,44 @@ class ShiprocketService:
         breakdown = []
         total = Decimal("0.00")
         for supplier_id, supplier_cart_items in sorted(supplier_items.items()):
+            product_ids = [item.product_id for item in supplier_cart_items]
+            product_names = [
+                (
+                    str(item.product.name or f"Product #{item.product_id}")
+                    if item.product
+                    else f"Product #{item.product_id}"
+                )
+                for item in supplier_cart_items
+            ]
             current_app.logger.info(
-                "Shiprocket checkout pickup lookup: customer_account=%s supplier_id=%s product_ids=%s cart_item_ids=%s",
+                "Shiprocket checkout pickup lookup: customer_account=%s supplier_id=%s product_ids=%s product_names=%s cart_item_ids=%s",
                 account_id,
                 supplier_id,
-                [item.product_id for item in supplier_cart_items],
+                product_ids,
+                product_names,
                 [item.id for item in supplier_cart_items],
             )
-            pickup = cls._supplier_address(supplier_id)
+            try:
+                pickup = cls._supplier_address(supplier_id)
+            except ShiprocketError as exc:
+                current_app.logger.error(
+                    "Shiprocket checkout pickup resolution failed: customer_account=%s supplier_id=%s product_ids=%s product_names=%s code=%s",
+                    account_id,
+                    supplier_id,
+                    product_ids,
+                    product_names,
+                    exc.code or "SHIPROCKET_ERROR",
+                )
+                if exc.code == "SUPPLIER_PICKUP_MISSING":
+                    item_label = (
+                        ", ".join(dict.fromkeys(product_names[:3])) or "a cart item"
+                    )
+                    raise ShiprocketError(
+                        f"The supplier who owns {item_label} has not saved a warehouse address for pickup. The address saved in your currently open supplier profile can only be used for products owned by that same supplier account. Please check the Render log for the supplier_id associated with this product.",
+                        code="SUPPLIER_PICKUP_MISSING",
+                        retryable=False,
+                    ) from exc
+                raise
             package = cls._package_dimensions(supplier_cart_items)
             supplier_subtotal = sum(
                 (

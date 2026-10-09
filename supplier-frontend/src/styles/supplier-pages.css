@@ -1822,3 +1822,232 @@
         width: 100%;
     }
 }
+
+/* Supplier warehouse / return address panel */
+.profile-return-address-panel {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #dfe6ef;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.035);
+}
+
+.profile-return-address-panel .panel-header {
+    padding: 22px 24px 0;
+    margin-bottom: 8px;
+}
+
+.profile-return-address-panel .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: #172033;
+    font-size: 16px;
+    font-weight: 800;
+}
+
+.profile-return-address-panel .panel-title svg {
+    color: #d18a00;
+    flex: 0 0 auto;
+}
+
+.profile-return-address-panel .panel-subtitle {
+    max-width: 620px;
+    margin-top: 6px;
+    color: #718096;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.warehouse-address-owner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 14px 24px 0;
+    padding: 13px 15px;
+    border: 1px solid #e1eaf6;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f8fbff 0%, #f4f7fc 100%);
+}
+
+.warehouse-address-owner-icon {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    place-items: center;
+    border-radius: 10px;
+    background: #fff1c7;
+    color: #9a6700;
+    font-size: 13px;
+}
+
+.warehouse-address-owner-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.warehouse-address-owner-copy > span {
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .045em;
+    text-transform: uppercase;
+}
+
+.warehouse-address-owner-copy strong {
+    color: #162033;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.warehouse-address-owner-copy small {
+    color: #69788d;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.profile-return-address-panel .form-card {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    padding: 18px 24px 24px;
+}
+
+.profile-location-actions {
+    display: grid;
+    grid-template-columns: minmax(190px, auto) minmax(0, 1fr);
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 2px;
+    padding: 14px;
+    border: 1px solid #e5eaf1;
+    border-radius: 12px;
+    background: #fafcff;
+}
+
+.profile-location-actions .action-link {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 13px;
+    border: 1px solid #172033;
+    border-radius: 9px;
+    background: #172033;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.35;
+    text-align: center;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.profile-location-actions .action-link:hover {
+    transform: translateY(-1px);
+    border-color: #273850;
+    background: #273850;
+}
+
+.profile-location-actions .action-link:focus-visible {
+    outline: 3px solid rgba(245, 158, 11, .35);
+    outline-offset: 2px;
+}
+
+.profile-location-actions .form-help {
+    display: block;
+    margin: 0;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.6;
+}
+
+.profile-return-address-panel .profile-state {
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 2px;
+    padding: 12px 14px;
+    border-color: #dce9f8;
+    background: #f4f8fe;
+}
+
+.profile-return-address-panel .profile-state span {
+    color: #60738b;
+    font-size: 11px;
+}
+
+.profile-return-address-panel .profile-state b {
+    color: #243650;
+    font-size: 11px;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+.profile-return-address-panel .form-label {
+    margin: 0;
+    color: #344256;
+    font-size: 11px;
+    font-weight: 750;
+}
+
+.profile-return-address-panel .form-control {
+    display: block;
+    margin-top: 6px;
+    background: #fff;
+    color: #172033;
+    font-size: 12px;
+}
+
+.profile-return-address-panel .form-control::placeholder {
+    color: #a0acbb;
+}
+
+.profile-return-address-panel .form-grid-2 {
+    gap: 12px;
+    margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+    .profile-location-actions {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    .profile-location-actions .action-link {
+        width: 100%;
+    }
+}
+
+@media (max-width: 560px) {
+    .profile-return-address-panel .panel-header {
+        padding: 18px 16px 0;
+    }
+
+    .warehouse-address-owner {
+        margin-right: 16px;
+        margin-left: 16px;
+        padding: 12px;
+    }
+
+    .profile-return-address-panel .form-card {
+        padding: 15px 16px 18px;
+    }
+
+    .profile-return-address-panel .profile-state {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .profile-return-address-panel .profile-state b {
+        text-align: left;
+    }
+}
+
