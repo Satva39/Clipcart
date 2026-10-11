@@ -28,10 +28,15 @@ def get_marketing_fee():
 
 
 def get_supplier_registration_fee():
-    return _setting_decimal(
+    fee = _setting_decimal(
         "supplier_registration_fee",
         DEFAULT_SUPPLIER_REGISTRATION_FEE,
     )
+    # The settings API enforces a positive minimum, but a legacy/manual database
+    # value of zero may still exist. Never create a zero-value supplier payment.
+    if fee <= Decimal("0.00"):
+        return money(DEFAULT_SUPPLIER_REGISTRATION_FEE)
+    return money(fee)
 
 
 def get_tax_rate():

@@ -1,8 +1,8 @@
-import os
 from decimal import Decimal
+from functools import wraps
 
-from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask import Blueprint, current_app, request
+from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
 from app.extensions import db
 from app.modules.accounts.models import Account
@@ -10,7 +10,6 @@ from app.shared.utils.api_response import success, error
 from app.modules.accounts.enums import UserRole, UserStatus
 from app.modules.accounts.services import create_account, email_exists, login_account
 from app.modules.accounts.repository import AccountRepository
-from app.modules.accounts.decorators import supplier_required
 from app.modules.payments.models import Payment
 from app.modules.payouts.models import SupplierPayoutAccount
 from app.modules.seller_verification.models import SellerVerification
@@ -23,6 +22,39 @@ supplier_registration_bp = Blueprint(
     __name__,
     url_prefix="/api/supplier-registration",
 )
+
+
+def supplier_onboarding_required(fn):
+    """Allow a valid pending supplier to finish onboarding, without granting portal access.
+
+    The normal supplier decorator intentionally requires ACTIVE status. Registration
+    payment/status endpoints are the exception: newly registered suppliers are PENDING
+    until a server-verified payment succeeds. Suspended/deleted accounts remain blocked.
+    """
+
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        verify_jwt_in_request()
+        claims = get_jwt()
+        role = str(claims.get("role", "")).upper()
+        portal = str(claims.get("portal", "")).lower()
+        if role != UserRole.SUPPLIER.value or (portal and portal != "supplier"):
+            return error("Supplier onboarding access required.", 403)
+
+        try:
+            account_id = int(get_jwt_identity())
+        except (TypeError, ValueError):
+            return error("Invalid supplier session.", 401)
+
+        account = Account.query.get(account_id)
+        if not account or account.role != UserRole.SUPPLIER:
+            return error("Supplier account not found.", 403)
+        if account.status in {UserStatus.SUSPENDED, UserStatus.DELETED}:
+            return error("Account access is currently restricted.", 403)
+
+        return fn(*args, **kwargs)
+
+    return wrapped
 
 
 def _registration_state(account):
@@ -126,8 +158,7 @@ def register_supplier():
 
 
 @supplier_registration_bp.get("/status")
-@jwt_required()
-@supplier_required
+@supplier_onboarding_required
 def registration_status():
     account = AccountRepository.get_by_id(int(get_jwt_identity()))
     if not account:
@@ -136,8 +167,7 @@ def registration_status():
 
 
 @supplier_registration_bp.post("/payment/order")
-@jwt_required()
-@supplier_required
+@supplier_onboarding_required
 def create_registration_payment():
     account_id = int(get_jwt_identity())
     account = Account.query.filter_by(id=account_id).with_for_update().first()
@@ -163,22 +193,43 @@ def create_registration_payment():
         .first()
     )
 
-    key_id = os.getenv("RAZORPAY_KEY_ID") or ""
+    key_id = str(current_app.config.get("RAZORPAY_KEY_ID") or "").strip()
     if not key_id:
         return error("Razorpay Key ID is not configured.", 500)
 
     registration_fee = get_supplier_registration_fee()
+    if registration_fee <= Decimal("0.00"):
+        current_app.logger.error(
+            "Supplier registration payment blocked: configured fee is not positive; account_id=%s",
+            account.id,
+        )
+        return error(
+            "Supplier registration fee is not configured correctly. Please contact support.",
+            503,
+        )
 
-    if existing and existing.gateway_order_id:
+    if (
+        existing
+        and existing.gateway_order_id
+        and Decimal(str(existing.amount)) == registration_fee
+    ):
         return success(
             "Registration payment order already initialized.",
             {
                 "order_id": existing.gateway_order_id,
                 "amount": float(registration_fee),
+                "amount_paise": int(registration_fee * Decimal("100")),
                 "currency": "INR",
                 "key_id": key_id,
             },
         )
+    if existing:
+        existing.status = "FAILED"
+        existing.failure_message = (
+            "Registration fee changed or the previous gateway order was incomplete; "
+            "a new payment order was created."
+        )
+        db.session.flush()
 
     receipt = f"supplier_registration_{account.id}"
     try:
@@ -221,6 +272,7 @@ def create_registration_payment():
                     {
                         "order_id": existing.gateway_order_id,
                         "amount": float(registration_fee),
+                        "amount_paise": int(registration_fee * Decimal("100")),
                         "currency": "INR",
                         "key_id": key_id,
                     },
@@ -232,6 +284,7 @@ def create_registration_payment():
         {
             "order_id": order["id"],
             "amount": float(registration_fee),
+            "amount_paise": int(registration_fee * Decimal("100")),
             "currency": "INR",
             "key_id": key_id,
         },
@@ -239,8 +292,7 @@ def create_registration_payment():
 
 
 @supplier_registration_bp.post("/payment/verify")
-@jwt_required()
-@supplier_required
+@supplier_onboarding_required
 def verify_registration_payment():
     account_id = int(get_jwt_identity())
     account = AccountRepository.get_by_id(account_id)
@@ -270,9 +322,14 @@ def verify_registration_payment():
         not payment_record
         or payment_record.account_id != account.id
         or payment_record.payment_type != "SUPPLIER_REGISTRATION"
+        or payment_record.status not in {"PENDING", "SUCCESS"}
     ):
         return error("Registration payment order is invalid.", 400)
-    if payment_record.status == "SUCCESS" and verification.registration_fee_paid:
+    if (
+        payment_record.status == "SUCCESS"
+        and verification
+        and verification.registration_fee_paid
+    ):
         return success(
             "Supplier registration is already active.", {"status": account.status.value}
         )

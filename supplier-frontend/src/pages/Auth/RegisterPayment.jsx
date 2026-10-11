@@ -24,11 +24,39 @@ export default function RegisterPayment() {
       )
       .finally(() => setLoading(false));
   }, [navigate]);
+  const registrationFee = Number(state?.registration_fee);
+  const feeIsValid = Number.isFinite(registrationFee) && registrationFee > 0;
+
   async function pay() {
+    if (!state || !feeIsValid || state.registration_fee_paid) {
+      setError(
+        "A valid registration fee is not available yet. Refresh this page; if the issue continues, contact support.",
+      );
+      return;
+    }
     setPaying(true);
     setError("");
     try {
       const order = await createRegistrationPayment();
+      const amountPaise = Number(order.amount_paise);
+      const amountFromRupees = Math.round(Number(order.amount) * 100);
+      const verifiedAmountPaise =
+        Number.isSafeInteger(amountPaise) && amountPaise > 0
+          ? amountPaise
+          : amountFromRupees;
+      if (
+        !Number.isSafeInteger(verifiedAmountPaise) ||
+        verifiedAmountPaise <= 0
+      ) {
+        throw new Error(
+          "The registration fee returned by the server is invalid. No payment was started.",
+        );
+      }
+      if (!order.key_id || !order.order_id) {
+        throw new Error(
+          "Razorpay payment details are incomplete. Please contact support.",
+        );
+      }
       if (!window.Razorpay) {
         await new Promise((resolve, reject) => {
           const script = document.createElement("script");
@@ -40,7 +68,7 @@ export default function RegisterPayment() {
       }
       const razorpay = new window.Razorpay({
         key: order.key_id,
-        amount: Number(order.amount) * 100,
+        amount: verifiedAmountPaise,
         currency: order.currency,
         name: "Clipcart",
         description: "Supplier Registration Fee",
@@ -78,6 +106,7 @@ export default function RegisterPayment() {
     } catch (e) {
       setError(
         e?.response?.data?.message ||
+          e?.message ||
           "Unable to initialize the supplier registration payment.",
       );
       setPaying(false);
@@ -104,13 +133,21 @@ export default function RegisterPayment() {
           after Razorpay payment verification succeeds on the server.
         </p>
         <div className="payment-amount">
-          <span>₹</span>
-          {Number(state?.registration_fee || 0).toFixed(2)}
+          {feeIsValid ? (
+            <>
+              <span>₹</span>
+              {registrationFee.toFixed(2)}
+            </>
+          ) : (
+            <span className="payment-amount-unavailable">Fee unavailable</span>
+          )}
         </div>
         <div className="payment-meta">
           <div>
             <span>Amount</span>
-            <b>₹{Number(state?.registration_fee || 0).toFixed(2)}</b>
+            <b>
+              {feeIsValid ? `₹${registrationFee.toFixed(2)}` : "Unavailable"}
+            </b>
           </div>
           <div>
             <span>Gateway</span>
@@ -125,13 +162,21 @@ export default function RegisterPayment() {
         <button
           className="payment-main-btn"
           onClick={pay}
-          disabled={paying || state?.registration_fee_paid}
+          disabled={
+            loading ||
+            paying ||
+            !state ||
+            !feeIsValid ||
+            state?.registration_fee_paid
+          }
         >
           {paying
             ? "Opening secure checkout…"
             : state?.registration_fee_paid
               ? "Payment already verified"
-              : `Pay ₹${Number(state?.registration_fee || 0).toFixed(2)} securely`}
+              : feeIsValid
+                ? `Pay ₹${registrationFee.toFixed(2)} securely`
+                : "Payment unavailable — reload details"}
         </button>
         <p className="auth-note">
           Do not close the page until Razorpay finishes. A successful browser
